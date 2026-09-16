@@ -1,10 +1,10 @@
-# Product UGC Forge
+# Product UGC Montage
 
 [中文](README.md) · English
 
 > Evidence-backed product video production for TikTok, Reels, Shorts, and localized ecommerce campaigns.
 
-`product-ugc-forge` is not a random clip concatenator. It is an auditable production skill: lock the market and product evidence, let AI analyze visuals and rank shots by selling point, then deliver with one complete Japanese narration, product annotations, deterministic rendering, and automated QA.
+`product-ugc-montage` is not a random clip concatenator. It is an auditable production skill: lock the market and product evidence, let AI analyze visuals and rank shots by selling point, then deliver with one complete Japanese narration, product annotations, deterministic rendering, and automated QA.
 
 ## In one sentence
 
@@ -117,7 +117,7 @@ extract segments → strip source audio → concatenate picture
 
 | Tool | Responsibility in this skill | Explicitly does not own |
 |---|---|---|
-| `product-ugc-forge` | Market, evidence, claims, authorization, orchestration, release policy | Product truth source |
+| `product-ugc-montage` | Market, evidence, claims, authorization, orchestration, release policy | Product truth source |
 | `video-use` | Visual understanding, shot ranking, EDL, visual QA | Audio and paid providers |
 | [Kinocut](https://github.com/KyaniteLabs/kinocut) | Typed local render, mixing, preflight, receipts, quality gates | Commercial approval |
 | [MoneyPrinterTurbo](https://github.com/harry0703/MoneyPrinterTurbo) | Reference for script → TTS → BGM → export batching | Evidence and annotation policy |
@@ -125,23 +125,23 @@ extract segments → strip source audio → concatenate picture
 ## Install and quick start
 
 ```bash
-git clone https://github.com/peipeijiang/product-ugc-forge.git ~/.agents/skills/product-ugc-forge
+git clone https://github.com/peipeijiang/product-ugc-montage.git ~/.agents/skills/product-ugc-montage
 ```
 
 Run local checks first:
 
 ```bash
-python3 ~/.agents/skills/product-ugc-forge/scripts/check_env.py --edit-dir ./edit
-python3 ~/.agents/skills/product-ugc-forge/scripts/validate_annotations.py ./edit/product_annotation_plan.json
-python3 ~/.agents/skills/product-ugc-forge/scripts/score_asset_library.py ./asset_library/library_manifest.json
-python3 ~/.agents/skills/product-ugc-forge/scripts/score_dynamic_ending.py ./edit/final.mp4 --edl ./edit/video_use_edl.json
-python3 ~/.agents/skills/product-ugc-forge/scripts/qa_unified_audio.py ./edit/final.mp4 --narration ./edit/narration_ja.wav --bgm ./edit/bgm.wav --script ./edit/narration_ja.txt --annotations ./edit/product_annotation_plan.json
+python3 ~/.agents/skills/product-ugc-montage/scripts/check_env.py --edit-dir ./edit
+python3 ~/.agents/skills/product-ugc-montage/scripts/validate_annotations.py ./edit/product_annotation_plan.json
+python3 ~/.agents/skills/product-ugc-montage/scripts/score_asset_library.py ./asset_library/library_manifest.json
+python3 ~/.agents/skills/product-ugc-montage/scripts/score_dynamic_ending.py ./edit/final.mp4 --edl ./edit/video_use_edl.json
+python3 ~/.agents/skills/product-ugc-montage/scripts/qa_unified_audio.py ./edit/final.mp4 --narration ./edit/narration_ja.wav --bgm ./edit/bgm.wav --script ./edit/narration_ja.txt --annotations ./edit/product_annotation_plan.json
 ```
 
 The provider adapter supports dry-run:
 
 ```bash
-python3 ~/.agents/skills/product-ugc-forge/scripts/providers/updrama_client.py gem \
+python3 ~/.agents/skills/product-ugc-montage/scripts/providers/updrama_client.py gem \
   'このテントは広くて、日差しや雨の日にも使いやすいです。' \
   --voice-id Zephyr --dry-run
 ```
@@ -151,7 +151,7 @@ A real call requires `UPDRAMA_API_KEY` and explicit paid-audio authorization imm
 ## Repository layout
 
 ```text
-product-ugc-forge/
+product-ugc-montage/
 ├── SKILL.md                         # agent workflow and boundaries
 ├── README.md / README.en.md         # bilingual project docs
 ├── agents/openai.yaml               # Codex display metadata
@@ -187,4 +187,3 @@ Even after automated checks pass, perform one visual and audio review before pub
 - [Kinocut](https://github.com/KyaniteLabs/kinocut)
 - [MoneyPrinterTurbo](https://github.com/harry0703/MoneyPrinterTurbo)
 - [video-use](https://github.com/browser-use/video-use)
-

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://codex.local/product-ugc-forge/product-annotation.schema.json",
+  "$id": "https://codex.local/product-ugc-montage/product-annotation.schema.json",
   "title": "Product Annotation Plan",
   "description": "Claim-linked on-screen product callouts; this is not a narration subtitle track.",
   "type": "object",

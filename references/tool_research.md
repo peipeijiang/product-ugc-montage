@@ -36,7 +36,7 @@ It demonstrates provider selection, reusable TTS timing, BGM file/provider selec
 
 ## Resulting tool split
 
-`product-ugc-forge` owns market, evidence, claims, paid authorization, and release policy.
+`product-ugc-montage` owns market, evidence, claims, paid authorization, and release policy.
 
 `video-use` owns visual analysis, shot ranking, EDL drafting, and visual QA only.
 

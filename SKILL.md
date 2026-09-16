@@ -1,9 +1,9 @@
 ---
-name: product-ugc-forge
+name: product-ugc-montage
 description: "Produce evidence-backed ecommerce UGC ads from a product URL or prepared asset library: lock the market, build a tagged visual library, then edit with GEM-3.1-TTS narration, BGM, product annotations, and video-use/FFmpeg QA."
 ---
 
-# Product UGC Forge
+# Product UGC Montage
 
 Use this skill for short-form ecommerce UGC ads (TikTok, Reels, Shorts) made from a product URL or an existing product-ugc asset library. It covers evidence capture, product cognition, claim safety, visual asset generation, audio-first editorial, and release QA. It is not a long-form documentary workflow.
 

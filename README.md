@@ -1,10 +1,10 @@
-# Product UGC Forge
+# Product UGC Montage
 
 中文 · [English](README.en.md)
 
 > Evidence-backed product video production for TikTok, Reels, Shorts, and localized ecommerce campaigns.
 
-`product-ugc-forge` 不是一个“随机拼接素材”的脚本，而是一套可审计的产品视频生产 skill：先锁定市场与产品证据，再让 AI 分析画面、按买点选镜头，最后用统一日语旁白、产品标注和自动质检交付成片。
+`product-ugc-montage` 不是一个“随机拼接素材”的脚本，而是一套可审计的产品视频生产 skill：先锁定市场与产品证据，再让 AI 分析画面、按买点选镜头，最后用统一日语旁白、产品标注和自动质检交付成片。
 
 ## 一句话定位
 
@@ -116,7 +116,7 @@ GET  /v1/media/status?task_id=...
 
 | 工具 | 在本 skill 中的职责 | 不负责什么 |
 |---|---|---|
-| `product-ugc-forge` | 市场、证据、声明、授权、编排和最终放行 | 不替代产品事实来源 |
+| `product-ugc-montage` | 市场、证据、声明、授权、编排和最终放行 | 不替代产品事实来源 |
 | `video-use` | 画面理解、镜头排序、EDL、视觉 QA | 不接管音频和付费 provider |
 | [Kinocut](https://github.com/KyaniteLabs/kinocut) | 本地 typed render、混音、preflight、receipt、质量门禁 | 不替代商业审批 |
 | [MoneyPrinterTurbo](https://github.com/harry0703/MoneyPrinterTurbo) | 参考脚本→TTS→BGM→导出的批处理架构 | 不覆盖本 skill 的证据和标注策略 |
@@ -124,23 +124,23 @@ GET  /v1/media/status?task_id=...
 ## 安装与快速开始
 
 ```bash
-git clone https://github.com/peipeijiang/product-ugc-forge.git ~/.agents/skills/product-ugc-forge
+git clone https://github.com/peipeijiang/product-ugc-montage.git ~/.agents/skills/product-ugc-montage
 ```
 
 建议先做本地检查：
 
 ```bash
-python3 ~/.agents/skills/product-ugc-forge/scripts/check_env.py --edit-dir ./edit
-python3 ~/.agents/skills/product-ugc-forge/scripts/validate_annotations.py ./edit/product_annotation_plan.json
-python3 ~/.agents/skills/product-ugc-forge/scripts/score_asset_library.py ./asset_library/library_manifest.json
-python3 ~/.agents/skills/product-ugc-forge/scripts/score_dynamic_ending.py ./edit/final.mp4 --edl ./edit/video_use_edl.json
-python3 ~/.agents/skills/product-ugc-forge/scripts/qa_unified_audio.py ./edit/final.mp4 --narration ./edit/narration_ja.wav --bgm ./edit/bgm.wav --script ./edit/narration_ja.txt --annotations ./edit/product_annotation_plan.json
+python3 ~/.agents/skills/product-ugc-montage/scripts/check_env.py --edit-dir ./edit
+python3 ~/.agents/skills/product-ugc-montage/scripts/validate_annotations.py ./edit/product_annotation_plan.json
+python3 ~/.agents/skills/product-ugc-montage/scripts/score_asset_library.py ./asset_library/library_manifest.json
+python3 ~/.agents/skills/product-ugc-montage/scripts/score_dynamic_ending.py ./edit/final.mp4 --edl ./edit/video_use_edl.json
+python3 ~/.agents/skills/product-ugc-montage/scripts/qa_unified_audio.py ./edit/final.mp4 --narration ./edit/narration_ja.wav --bgm ./edit/bgm.wav --script ./edit/narration_ja.txt --annotations ./edit/product_annotation_plan.json
 ```
 
 provider adapter 支持 dry-run：
 
 ```bash
-python3 ~/.agents/skills/product-ugc-forge/scripts/providers/updrama_client.py gem \
+python3 ~/.agents/skills/product-ugc-montage/scripts/providers/updrama_client.py gem \
   'このテントは広くて、日差しや雨の日にも使いやすいです。' \
   --voice-id Zephyr --dry-run
 ```
@@ -150,7 +150,7 @@ python3 ~/.agents/skills/product-ugc-forge/scripts/providers/updrama_client.py g
 ## 目录结构
 
 ```text
-product-ugc-forge/
+product-ugc-montage/
 ├── SKILL.md                         # agent 工作流与边界
 ├── README.md / README.en.md         # 双语项目文档
 ├── agents/openai.yaml               # Codex 展示信息
@@ -186,4 +186,3 @@ product-ugc-forge/
 - [Kinocut](https://github.com/KyaniteLabs/kinocut)
 - [MoneyPrinterTurbo](https://github.com/harry0703/MoneyPrinterTurbo)
 - [video-use](https://github.com/browser-use/video-use)
-
