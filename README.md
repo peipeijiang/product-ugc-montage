@@ -41,21 +41,24 @@ flowchart LR
 | 1. Evidence | 采集商品图、SKU、规格和页面限制 | `product_manifest.json`、`image_analysis.json` | 素材与证据一一对应 |
 | 2. Claims | 将买家问题映射到可见证明瞬间 | `claim-ledger.json`、benefit ladder | 每条文案都有证据来源 |
 | 3. Library | 生成/整理多角度 B-roll，淘汰身份漂移 | `library_manifest.json`、reserve set | 通过 identity、usage、L1/L2 QC |
-| 4. Narration | 写一条完整自然的日语旁白 | `narration_ja.txt` | 句子完整、市场语言一致 |
-| 5. Audio | GEM-3.1-TTS 生成单轨；准备一条 BGM | 音频、时间戳、provider receipt | BGM 比旁白低 8–12 dB |
-| 6. Editorial | 只分析画面、按买点选择镜头 | `video_use_edl.json` | 镜头证明买点、结尾有动态 |
-| 7. Render | 静音源片、拼接视频、混音、叠加标注 | preview / final MP4 | CFR、9:16、无黑帧/跳切 |
-| 8. Release | 自动检查并限次返工 | `qa-report.json`、delivery manifest | 全部质量门禁通过 |
+| 4. Batch plan | 计算组合上限、可复核上限和建议批量 | `variant_batch_plan.json` | 用户确认 `N` 后才并发渲染 |
+| 5. Narration | 写一条完整自然的日语旁白 | `narration_ja.txt` | 句子完整、市场语言一致 |
+| 6. Audio | GEM-3.1-TTS 单轨；准备多个合格 BGM 候选 | 音频、时间戳、provider receipts | 每个变体 BGM 低 8–12 dB |
+| 7. Editorial | 只分析画面、按买点选择镜头 | 每个变体一份 EDL | 镜头证明买点、结尾有动态 |
+| 8. Render | 静音源片、并发拼接、混音、叠加标注 | preview / final MP4 set | CFR、9:16、无黑帧/跳切 |
+| 9. Release | 每个变体自动检查并限次返工 | `qa-report.json`、delivery manifest | 全部质量门禁通过 |
 
-## 六条不可变音频规则
+## 七条不可变音频规则
 
 1. 先写**一条完整的日语旁白**，再决定镜头时长。
 2. 用同一个 voice 生成一条完整的 **GEM-3.1-TTS** 音轨，不把旁白拆成镜头碎片。
 3. 所有源片音频统一 `mute` / `-an`；源片 ASR 只能帮助理解画面，不能进入最终混音。
-4. 使用一条贯穿全片的轻柔、无 vocals BGM，默认候选为 **Suno v4.5 instrumental**。
+4. 使用通过质检的轻柔、无 vocals BGM 候选池；默认候选为 **Suno v4.5 instrumental**，不是强制模型。
 5. 在最终时间线上测量响度，让 BGM 比旁白低 **8–12 dB**，而不是只记录一个音量倍率。
 6. 句尾、音画时长、重复句、黑帧、音画同步任一失败，都要返工而不是静默截断。
 7. 成片时长由旁白实际时长推导：`旁白时长 + 前置 headroom + 结尾 clean tail`，不写死 15/25/30 秒。
+
+批量变体允许复用同一条完整旁白来控制成本，但不能强制所有变体使用同一首 BGM。`N ≥ 4` 时默认准备至少两个通过质检的 BGM 候选，按情绪或轮换策略分配；若 Suno 输出出现嗡鸣、单频、明显循环接缝、人声或戏剧性 drop，则标记候选失败并切换已授权 provider/原创器乐，不静默沿用。
 
 ## 技术亮点
 
@@ -108,7 +111,26 @@ GET  /v1/media/status?task_id=...
 
 默认阈值：素材多样性 `<65` 或动态结尾 `<70` 时自动触发重新排 EDL；`borderline` 必须进入视觉复核。
 
-### 7. 可审计的本地渲染
+### 7. 一次理解、多条并发混剪
+
+素材库完成并通过 QC 后，运行：
+
+```bash
+python3 ~/.agents/skills/product-ugc-montage/scripts/plan_variant_batch.py \
+  ./asset_library/library_manifest.json --include-reserve \
+  -o ./edit/variant_batch_plan.json
+```
+
+规划器会给出：
+
+- 理论组合数：各买点镜头选择的笛卡尔积；
+- 可复核硬上限：默认 12 条，避免近似重复和 QA 失控；
+- 推荐首批：默认 6 条，用于第一轮 A/B 测试；
+- 必须由用户决定的 `N`。
+
+以当前日本 canopy 素材库为例：包含 reserve 时理论组合为 48，建议首批 6，最多建议同时进入投放级复核 12 条。48 是数学组合上限，不是建议全部发布；每条仍需独立 EDL、标注、BGM、动态结尾和发布门禁。用户确认 `N` 后，AI 才并发生成 `N` 条变体。
+
+### 8. 可审计的本地渲染
 
 优先使用 Kinocut 的 typed workflow、`doctor`、preflight、receipt 和 release checkpoint；没有 Kinocut 时使用同一 EDL 规则的 FFmpeg fallback。渲染顺序固定为：
 
@@ -137,6 +159,7 @@ git clone https://github.com/peipeijiang/product-ugc-montage.git ~/.agents/skill
 ```bash
 python3 ~/.agents/skills/product-ugc-montage/scripts/check_env.py --edit-dir ./edit
 python3 ~/.agents/skills/product-ugc-montage/scripts/derive_runtime.py ./edit/narration_ja.wav -o ./edit/runtime.json
+python3 ~/.agents/skills/product-ugc-montage/scripts/plan_variant_batch.py ./asset_library/library_manifest.json --include-reserve -o ./edit/variant_batch_plan.json
 python3 ~/.agents/skills/product-ugc-montage/scripts/validate_annotations.py ./edit/product_annotation_plan.json
 python3 ~/.agents/skills/product-ugc-montage/scripts/score_asset_library.py ./asset_library/library_manifest.json
 python3 ~/.agents/skills/product-ugc-montage/scripts/score_dynamic_ending.py ./edit/final.mp4 --edl ./edit/video_use_edl.json
@@ -170,6 +193,7 @@ product-ugc-montage/
 └── scripts/
     ├── providers/updrama_client.py
     ├── derive_runtime.py
+    ├── plan_variant_batch.py
     ├── qa_unified_audio.py
     ├── render_annotations.py
     ├── score_asset_library.py

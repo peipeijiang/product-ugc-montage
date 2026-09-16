@@ -41,21 +41,24 @@ flowchart LR
 | 1. Evidence | Capture product images, SKU, specs, and limitations | `product_manifest.json`, `image_analysis.json` | Evidence and assets map one-to-one |
 | 2. Claims | Map buyer problem to visible proof moments | `claim-ledger.json`, benefit ladder | Every line has an evidence source |
 | 3. Library | Build multi-angle B-roll and reject identity drift | `library_manifest.json`, reserve set | Identity, usage, L1/L2 QC pass |
-| 4. Narration | Write one complete, natural Japanese narration | `narration_ja.txt` | Complete sentences, locale consistency |
-| 5. Audio | Generate one GEM track and prepare one BGM bed | Audio, timings, provider receipt | BGM is 8–12 dB below narration |
-| 6. Editorial | Analyze picture and select shots by selling point | `video_use_edl.json` | Shots prove the claims; ending stays dynamic |
-| 7. Render | Mute sources, assemble picture, mix, and annotate | Preview / final MP4 | CFR, 9:16, no black frames or jumps |
-| 8. Release | Run checks and perform bounded revisions | `qa-report.json`, delivery manifest | All quality gates pass |
+| 4. Batch plan | Compute the combination ceiling, review cap, and recommendation | `variant_batch_plan.json` | User confirms `N` before parallel renders |
+| 5. Narration | Write one complete, natural Japanese narration | `narration_ja.txt` | Complete sentences, locale consistency |
+| 6. Audio | Generate one GEM track and a pool of passing BGM candidates | Audio, timings, provider receipts | Each variant BGM is 8–12 dB below narration |
+| 7. Editorial | Analyze picture and select shots by selling point | One EDL per variant | Shots prove the claims; ending stays dynamic |
+| 8. Render | Mute sources, parallelize picture assembly, mix, and annotate | Preview / final MP4 set | CFR, 9:16, no black frames or jumps |
+| 9. Release | Run checks per variant and perform bounded revisions | `qa-report.json`, delivery manifest | All quality gates pass |
 
-## Six immutable audio rules
+## Seven immutable audio rules
 
 1. Write **one complete Japanese narration** before timing shots.
 2. Use one voice to create one complete **GEM-3.1-TTS** narration track; do not create per-shot fragments.
 3. Mute every source-clip audio stream; source ASR is diagnostic only.
-4. Use one continuous, soft, instrumental BGM bed; the default candidate is **Suno v4.5 instrumental**.
+4. Use a pool of passing, soft, instrumental BGM candidates; **Suno v4.5 instrumental** is the default candidate, not a mandatory model.
 5. Measure the final timeline and keep BGM **8–12 dB below narration**, rather than documenting only a gain multiplier.
 6. Any sentence-tail, duration, duplicate-sentence, black-frame, or A/V-sync failure triggers revision instead of silent trimming.
 7. Runtime is derived from the real narration: `narration duration + headroom + clean tail`; never hard-code a 15/25/30-second target.
+
+Batch variants may reuse the same complete narration to control cost, but must not be forced onto one BGM track. For `N ≥ 4`, prepare at least two passing BGM candidates by default and assign them by mood or round-robin. If Suno output has hum, single-frequency energy, audible loop seams, vocals, or dramatic drops, mark that candidate failed and switch to an authorized provider/original instrumental; never silently reuse it.
 
 ## Technical highlights
 
@@ -108,7 +111,19 @@ Procedural fallbacks must not use a continuous single-frequency sine wave, hummi
 
 Default thresholds: diversity `<65` or dynamic ending `<70` automatically triggers EDL revision; `borderline` requires visual review.
 
-### 7. Auditable local rendering
+### 7. One visual understanding, many parallel montages
+
+After the asset library passes QC, run:
+
+```bash
+python3 ~/.agents/skills/product-ugc-montage/scripts/plan_variant_batch.py \
+  ./asset_library/library_manifest.json --include-reserve \
+  -o ./edit/variant_batch_plan.json
+```
+
+The planner reports the theoretical Cartesian combination count, a conservative reviewable hard cap (12 by default), a recommended starting batch (6 by default), and a required user choice for `N`. For the current Japanese canopy library, the reserve-inclusive theoretical ceiling is 48; the suggested first batch is 6 and the reviewable cap is 12. Theoretical combinations are not a publishing promise: collapse near-duplicates, and run independent EDL, annotation, BGM, dynamic-ending, and release checks for every selected variant. Only after the user confirms `N` does the agent render the variants in parallel.
+
+### 8. Auditable local rendering
 
 Prefer Kinocut's typed workflow, `doctor`, preflight, receipts, and release checkpoint. If Kinocut is unavailable, use the same EDL contract with deterministic FFmpeg. The render order is fixed:
 
@@ -138,6 +153,7 @@ Run local checks first:
 ```bash
 python3 ~/.agents/skills/product-ugc-montage/scripts/check_env.py --edit-dir ./edit
 python3 ~/.agents/skills/product-ugc-montage/scripts/derive_runtime.py ./edit/narration_ja.wav -o ./edit/runtime.json
+python3 ~/.agents/skills/product-ugc-montage/scripts/plan_variant_batch.py ./asset_library/library_manifest.json --include-reserve -o ./edit/variant_batch_plan.json
 python3 ~/.agents/skills/product-ugc-montage/scripts/validate_annotations.py ./edit/product_annotation_plan.json
 python3 ~/.agents/skills/product-ugc-montage/scripts/score_asset_library.py ./asset_library/library_manifest.json
 python3 ~/.agents/skills/product-ugc-montage/scripts/score_dynamic_ending.py ./edit/final.mp4 --edl ./edit/video_use_edl.json
@@ -171,6 +187,7 @@ product-ugc-montage/
 └── scripts/
     ├── providers/updrama_client.py
     ├── derive_runtime.py
+    ├── plan_variant_batch.py
     ├── qa_unified_audio.py
     ├── render_annotations.py
     ├── score_asset_library.py

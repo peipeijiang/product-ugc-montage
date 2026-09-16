@@ -15,9 +15,10 @@ Read this reference when the run will generate new narration or BGM. It records 
 
 - Provider: updrama, `BASE_URL=https://api.lk888.ai`.
 - Create: `POST /v1/media/generate` with `model:"suno-v4.5"`, a style prompt, and `params.make_instrumental:"instrumental"`; leave lyrics empty for a no-vocal bed.
-- Prefer a short instrumental brief such as: `soft Japanese outdoor camping ambience, warm acoustic guitar and gentle pads, no vocals, no dramatic drops, seamless-feeling 30-second bed`.
+- Prefer a short instrumental brief such as: `soft Japanese outdoor camping ambience, warm acoustic guitar and gentle pads, no vocals, no dramatic drops, evolving arrangement, natural ending, seamless-feeling bed`; do not request a fixed 30-second duration when the runtime is narration-derived.
 - Poll with the same `is_final`/`state` rules. Record task ID, model, prompt, result URL, duration, license/provenance, and any loop/trim operation.
 - Before delivery, fit/loop the BGM to the narration-derived runtime, duck it **8–12 dB below narration** on the final timeline, add head/tail fades, and verify that no vocal or lyric content remains. Do not use a continuous sine tone, single-frequency drone, or unfiltered hum as a creative fallback; those are test signals only.
+- For batches, generate or select a candidate pool and assign tracks by mood/variant. Suno remains the default candidate, not a mandatory provider: switch when repeated outputs fail hum, no-vocal, seam, dynamic-range, or musicality checks. Record failed candidates and the replacement provider/track in the manifest.
 
 ## Authorization boundary
 

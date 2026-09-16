@@ -29,6 +29,8 @@ Every completed run should contain:
 7. **Do not use native-audio cut gates.** Since all source audio is muted, ASR on source clips is diagnostic only. Validate the unified narration against the final picture and reject incomplete sentence tails or audio/picture drift.
 8. **Keep evidence and media separate.** Preserve source files. Write derivatives, EDLs, transcripts, renders, and QA under the run's `edit/` (or `renders/`) directory.
 9. **Score before choosing.** Run the reusable asset-diversity and dynamic-ending scorers before delivery; use their results to trigger another AI edit pass, not as a replacement for visual review.
+10. **Plan batch size after the library is complete.** Run `scripts/plan_variant_batch.py` after visual assets pass QC. Report the theoretical combination ceiling, a conservative reviewable hard cap, and a recommended starting batch; require the user to choose `N` before parallel rendering or paid BGM/TTS work.
+11. **Parallelize only independent variants.** Once market, claims, narration, provider authorization, and asset gates are shared and frozen, render each selected variant independently. Every variant still needs its own EDL, annotations, BGM assignment, dynamic-ending score, and release QA; never publish raw combinatorial duplicates.
 
 ## Current end-to-end flow
 
@@ -38,10 +40,11 @@ Every completed run should contain:
 | 1. Evidence | gallery/SKU/detail capture and limitations | product manifest, image analysis, product brief |
 | 2. Claims | buyer problem → product intervention → visible proof | claim ledger and benefit ladder |
 | 3. Generate | identity/usage refs, keyframes, visual-only clips | accepted asset library and reserve set |
-| 4. Audio first | complete Japanese script, one GEM-3.1-TTS track, one soft BGM bed | narration text/audio, word/phrase timing, audio provenance |
-| 5. Video-use edit | inventory, transcript cache, visual checks, EDL, strategy confirmation | `edit/transcripts/`, `takes_packed.md`, `edit/edl.json`, annotation plan |
-| 6. Render | per-segment extraction, concat to narration-derived runtime, product annotations, optional subtitles last, audio mix | preview and final MP4 |
-| 7. Release QA | technical, semantic, audio, market and dynamic-ending checks | QA report, hashes, delivery manifest |
+| 4. Batch plan | diversity score, accepted/reserve counts, theoretical combinations, review cap | `edit/variant_batch_plan.json`, user-selected `N` |
+| 5. Audio first | complete Japanese script, one GEM-3.1-TTS track, passing BGM candidate pool | narration text/audio, word/phrase timing, audio provenance |
+| 6. Video-use edit | inventory, transcript cache, visual checks, EDLs, strategy confirmation | `edit/transcripts/`, `takes_packed.md`, one EDL per variant, annotation plans |
+| 7. Render | parallel per-variant extraction, narration-derived runtime, annotations, BGM assignment, optional subtitles last | preview and final MP4 set |
+| 8. Release QA | technical, semantic, audio, market and dynamic-ending checks per variant | QA reports, hashes, delivery manifest |
 
 ## 0. Route and initialize
 
@@ -89,7 +92,7 @@ Treat every generated clip as visual-only B-roll. Inventory any source audio for
 
 Write one complete, natural Japanese narration for the whole ad in the frozen market profile. Do not generate per-shot fragments and do not let shot selection rewrite the script after TTS. The default narration provider is **GEM-3.1-TTS** via the maintained updrama adapter; use one provider-supported voice for the entire run. Retain the task receipt, returned audio, script, and word-level timing.
 
-Use one continuous, soft BGM bed for the **derived runtime**. The default candidate is **Suno v4.5 instrumental**; request no vocals and record provenance/license. Avoid continuous sine tones, single-frequency drones, or unfiltered hums: they are diagnostic fallbacks, not acceptable creative BGM. Mix the BGM approximately **8–12 dB below the narration** (measure relative integrated/short-term loudness, not only a raw gain value), add gentle head/tail fades, and keep narration, BGM, and annotation assets separate until the final mix. All source-clip audio is muted before concatenation. If paid audio generation is not authorized or unavailable, use a clearly labeled musical/original fallback (soft chord bed, filtered texture, or licensed track) rather than a monotone test tone. Read [references/audio_providers.md](references/audio_providers.md) before submitting either provider task. The adapters live at `scripts/providers/updrama_client.py`; they must never be called until the paid-audio gate is explicitly confirmed.
+Use a BGM **candidate pool**, not one mandatory track for every output. The default candidate is **Suno v4.5 instrumental**; request no vocals and record provenance/license. For a batch, generate or select enough passing candidates to avoid a mechanical same-track export (at minimum two candidates when `N ≥ 4`, unless the user explicitly chooses one shared track). Assign candidates across variants by round-robin or mood mapping, then fit each to the derived runtime. Avoid continuous sine tones, single-frequency drones, unfiltered hums, audible looping seams, vocals, and dramatic drops: these fail the BGM gate. Mix the chosen BGM approximately **8–12 dB below the narration** (measure relative integrated/short-term loudness, not only a raw gain value), add gentle head/tail fades, and keep narration, BGM, and annotation assets separate until each final mix. All source-clip audio is muted before concatenation. If Suno candidates fail musicality, no-vocal, seam, or hum checks, keep Suno as a failed candidate and switch to an approved/licensed provider or clearly labeled original instrumental fallback; do not silently reuse a bad bed. Read [references/audio_providers.md](references/audio_providers.md) before submitting either provider task. The adapters live at `scripts/providers/updrama_client.py`; they must never be called until the paid-audio gate is explicitly confirmed.
 
 ### Product annotations, not subtitles
 
@@ -116,7 +119,7 @@ When `video-use` is available, use it only for visual analysis, evidence-aware s
 
 After the market, claim, and paid-generation gates pass, let the AI own the editorial loop:
 
-`ingest → visual score/rank → write complete Japanese narration → GEM-3.1-TTS → derive runtime → draft annotations → video-use EDL → mute/concat picture → add one BGM bed (−8 to −12 dB) → preview → mechanical QA → visual QA → bounded fix loop → final`
+`ingest → visual score/rank → plan batch ceiling → user chooses N → write complete Japanese narration → GEM-3.1-TTS → derive runtime → draft variant annotations → video-use EDLs → mute/concat picture → assign passing BGM candidates (−8 to −12 dB) → parallel preview renders → mechanical QA → visual QA → bounded fix loop → final set`
 
 The user does not need to touch a timeline. Stop only for a missing market, unsupported claim, provider/voice ambiguity, paid authorization, or the same QA failure after three fixes. This is an AI-managed montage, not an unconditional hands-off license to spend or publish.
 
@@ -128,6 +131,23 @@ The user does not need to touch a timeline. Stop only for a missing market, unsu
 - Use `timeline_view` only at decision points: ambiguous pauses, candidate cuts, identity continuity, and every final cut boundary.
 
 All B-roll is visual-only: set source audio to `-an`/mute before concat and do not repair generated dialogue. There is no native-audio assembly mode in this workflow.
+
+### Batch variant planning and parallel rendering
+
+After accepted assets and reserve clips are scored, run:
+
+```bash
+python3 scripts/plan_variant_batch.py <library_manifest.json> --include-reserve -o edit/variant_batch_plan.json
+```
+
+The planner reports:
+
+- `theoretical_combinations`: the Cartesian ceiling across selling-point clip choices;
+- `reviewable_hard_cap`: a conservative cap (default 12) that keeps claim, visual, audio, and release review tractable;
+- `recommended_batch`: a smaller starting batch (default 6) for A/B testing;
+- `user_choice_required`: always true.
+
+The user chooses `N` from `1..reviewable_hard_cap`. The orchestrator then creates `N` independent EDLs by varying hook, proof order, reserve usage, annotation timing, and BGM candidate assignment. It may render those jobs concurrently, but shared narration and evidence remain immutable. A variant is TikTok-ready only after its own source-audio, sentence-tail, annotation, loudness, black-frame, A/V-sync, diversity, and dynamic-ending checks pass. Theoretical combinations are not a promise to publish them all: collapse near-duplicates and reject unsupported or visually weak combinations.
 
 ### Strategy and EDL
 
@@ -148,7 +168,7 @@ Use `video-use/helpers/render.py` for visual analysis/EDL when available, then u
 
 `video-use` must produce a video-only base. Kinocut/FFmpeg owns the deterministic unified audio mix and release artifact. Keep the same EDL, boundary, annotation-order, optional-subtitle-order, and QA rules.
 
-After the first preview, run `scripts/score_asset_library.py <library_manifest.json>` and `scripts/score_dynamic_ending.py <rendered.mp4> --edl <edl.json>`. Treat `diversity < 65` or `dynamic ending < 70` as an automatic prompt to revise the EDL; a borderline score requires a visual review before delivery.
+After the first preview of every selected variant, run `scripts/score_asset_library.py <library_manifest.json>`, `scripts/score_dynamic_ending.py <rendered.mp4> --edl <edl.json>`, and the unified audio QA. Treat `diversity < 65` or `dynamic ending < 70` as an automatic prompt to revise that variant's EDL; a borderline score requires a visual review before delivery.
 
 ## 5. Shot planning and compile
 
