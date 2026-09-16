@@ -147,7 +147,7 @@ The planner reports:
 - `recommended_batch`: a smaller starting batch (default 6) for A/B testing;
 - `user_choice_required`: always true.
 
-The user chooses `N` from `1..reviewable_hard_cap`. The orchestrator then creates `N` independent EDLs by varying hook, proof order, reserve usage, annotation timing, and BGM candidate assignment. It may render those jobs concurrently, but shared narration and evidence remain immutable. A variant is TikTok-ready only after its own source-audio, sentence-tail, annotation, loudness, black-frame, A/V-sync, diversity, and dynamic-ending checks pass. Theoretical combinations are not a promise to publish them all: collapse near-duplicates and reject unsupported or visually weak combinations.
+The user chooses `N` from `1..reviewable_hard_cap`. The orchestrator then creates `N` independent EDLs by varying hook, proof order, reserve usage, annotation timing, and BGM candidate assignment. It may render those jobs concurrently with a bounded worker pool (default `min(N, 4)`, configurable to host CPU/GPU capacity), but shared narration and evidence remain immutable. A variant is TikTok-ready only after its own source-audio, sentence-tail, annotation, loudness, black-frame, A/V-sync, diversity, and dynamic-ending checks pass. Theoretical combinations are not a promise to publish them all: collapse near-duplicates and reject unsupported or visually weak combinations.
 
 ### Strategy and EDL
 

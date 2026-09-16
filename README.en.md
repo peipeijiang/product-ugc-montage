@@ -121,7 +121,7 @@ python3 ~/.agents/skills/product-ugc-montage/scripts/plan_variant_batch.py \
   -o ./edit/variant_batch_plan.json
 ```
 
-The planner reports the theoretical Cartesian combination count, a conservative reviewable hard cap (12 by default), a recommended starting batch (6 by default), and a required user choice for `N`. For the current Japanese canopy library, the reserve-inclusive theoretical ceiling is 48; the suggested first batch is 6 and the reviewable cap is 12. Theoretical combinations are not a publishing promise: collapse near-duplicates, and run independent EDL, annotation, BGM, dynamic-ending, and release checks for every selected variant. Only after the user confirms `N` does the agent render the variants in parallel.
+The planner reports the theoretical Cartesian combination count, a conservative reviewable hard cap (12 by default), a recommended starting batch (6 by default), and a required user choice for `N`. For the current Japanese canopy library, the reserve-inclusive theoretical ceiling is 48; the suggested first batch is 6 and the reviewable cap is 12. Theoretical combinations are not a publishing promise: collapse near-duplicates, and run independent EDL, annotation, BGM, dynamic-ending, and release checks for every selected variant. Only after the user confirms `N` does the agent render the variants in parallel, using a default worker pool of `min(N, 4)` that can be tuned to host CPU/GPU capacity.
 
 ### 8. Auditable local rendering
 

@@ -76,7 +76,7 @@ def main() -> int:
         "policy": {
             "one_variant_requires": "one complete narration, one continuous BGM bed, evidence-linked annotations, and dynamic ending QA",
             "do_not_publish_all_combinations": "near-duplicate combinations must be collapsed after visual/claim/audio review",
-            "parallelism": "render variants independently after the shared market/claim/audio gates pass",
+            "parallelism": "render variants independently after the shared market/claim/audio gates pass; default worker pool min(N, 4), configurable to host capacity",
             "bgm": "assign passing BGM candidates across variants; do not force one track across the entire batch",
         },
         "selection_prompt": f"Choose a batch size from 1 to {hard_cap}; recommended starting batch: {recommended}.",
