@@ -55,6 +55,7 @@ flowchart LR
 4. Use one continuous, soft, instrumental BGM bed; the default candidate is **Suno v4.5 instrumental**.
 5. Measure the final timeline and keep BGM **8–12 dB below narration**, rather than documenting only a gain multiplier.
 6. Any sentence-tail, duration, duplicate-sentence, black-frame, or A/V-sync failure triggers revision instead of silent trimming.
+7. Runtime is derived from the real narration: `narration duration + headroom + clean tail`; never hard-code a 15/25/30-second target.
 
 ## Technical highlights
 
@@ -96,14 +97,18 @@ download result_url + save receipt
 
 Each task records model, prompt hash, voice, task id, timestamp, and result URL. Importing the adapter or using dry-run never submits a paid request.
 
-### 5. Two scores make quality observable
+### 5. BGM is not a test signal
+
+Procedural fallbacks must not use a continuous single-frequency sine wave, humming drone, or unfiltered noise. Prefer Suno instrumental; when paid providers are not authorized, use an original chordal/filtered bed and measure the final 8–12 dB narration-to-BGM separation.
+
+### 6. Two scores make quality observable
 
 - **Asset diversity**: angle uniqueness 40%, variant uniqueness 25%, semantic tag spread 20%, metadata completeness 15%, plus cross-selling-point reuse signal.
 - **Dynamic ending**: tail-frame motion, tail-source diversity, and freeze/clone penalty; outputs `dynamic`, `borderline`, or `static_risk`.
 
 Default thresholds: diversity `<65` or dynamic ending `<70` automatically triggers EDL revision; `borderline` requires visual review.
 
-### 6. Auditable local rendering
+### 7. Auditable local rendering
 
 Prefer Kinocut's typed workflow, `doctor`, preflight, receipts, and release checkpoint. If Kinocut is unavailable, use the same EDL contract with deterministic FFmpeg. The render order is fixed:
 
@@ -132,6 +137,7 @@ Run local checks first:
 
 ```bash
 python3 ~/.agents/skills/product-ugc-montage/scripts/check_env.py --edit-dir ./edit
+python3 ~/.agents/skills/product-ugc-montage/scripts/derive_runtime.py ./edit/narration_ja.wav -o ./edit/runtime.json
 python3 ~/.agents/skills/product-ugc-montage/scripts/validate_annotations.py ./edit/product_annotation_plan.json
 python3 ~/.agents/skills/product-ugc-montage/scripts/score_asset_library.py ./asset_library/library_manifest.json
 python3 ~/.agents/skills/product-ugc-montage/scripts/score_dynamic_ending.py ./edit/final.mp4 --edl ./edit/video_use_edl.json
@@ -164,6 +170,7 @@ product-ugc-montage/
 │   └── video_use_risks.md
 └── scripts/
     ├── providers/updrama_client.py
+    ├── derive_runtime.py
     ├── qa_unified_audio.py
     ├── render_annotations.py
     ├── score_asset_library.py

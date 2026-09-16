@@ -6,13 +6,14 @@ This workflow is visual-only at the source-clip level. Smart editing analyzes pi
 
 1. Write one complete Japanese narration for the whole ad.
 2. Generate one complete GEM-3.1-TTS audio file from that exact script and retain word/phrase timing.
-3. Choose one soft, instrumental BGM bed for the full runtime (default candidate: Suno v4.5 instrumental).
-4. Mute or strip every source audio stream before segment extraction/concat.
-5. Mix narration and BGM only after the video-only base is assembled.
+3. Derive the runtime from the real narration duration: `narration_duration + headroom_before + clean_tail_after` (never a fixed 15/25/30-second target).
+4. Choose one soft, instrumental BGM bed and fit/loop it to that derived runtime (default candidate: Suno v4.5 instrumental).
+5. Mute or strip every source audio stream before segment extraction/concat.
+6. Mix narration and BGM only after the video-only base is assembled.
 
 ## Mix target
 
-Measure narration and BGM on the final timeline using integrated or short-term loudness. Keep BGM approximately **8–12 dB below narration**, with gentle head/tail fades. A raw volume multiplier alone is not sufficient evidence of compliance. Store the measured values and method in the QA report.
+Measure narration and BGM on the final timeline using integrated or short-term loudness. Keep BGM approximately **8–12 dB below narration**, with gentle head/tail fades. A raw volume multiplier alone is not sufficient evidence of compliance. Avoid continuous sine tones, single-frequency drones, or unfiltered hums; use a musical/chordal, filtered texture or an approved/licensed instrumental bed. Store the measured values and method in the QA report.
 
 ## Required automated checks
 

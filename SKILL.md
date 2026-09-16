@@ -25,7 +25,7 @@ Every completed run should contain:
 3. **Generation requires authorization.** A URL is not permission to spend. Before the first paid request, show the user the market, SKU/colorway, confirmed claims, excluded claims, number of variants, model, duration/aspect, and audio policy. Get explicit confirmation immediately before submission.
 4. **Use the canonical generation route.** Product cognition, identity/usage references, prompt generation, keyframes, provider submission, and L1/L2 QC must use the maintained `product-ugc-pipeline` adapters. Do not bypass its reference, payment, retry, or provider gates.
 5. **Source audio is always muted in this workflow.** Smart editing analyzes picture, motion, composition, identity, and evidence relevance only, then selects shots by selling point. It must not preserve, repair, or remix source speech, room tone, or music. The final master contains one generated narration track and one BGM bed.
-6. **Narration defines runtime.** First write one complete Japanese narration for the whole ad, then synthesize one complete GEM-3.1-TTS track, obtain word/phrase timing, and only then choose exact trims. Add 0.3–0.5 seconds of headroom before the first phrase and at least 1 second after the final phrase. Do not pad a cut with an accidental frozen frame; finish on a moving, semantically relevant shot whenever possible.
+6. **Narration defines runtime; never hard-code a target duration.** First write one complete Japanese narration for the whole ad, then synthesize one complete GEM-3.1-TTS track, obtain its real duration and word/phrase timing, and derive `runtime = narration_duration + headroom_before + clean_tail_after`. Choose trims to fill that derived runtime; do not stretch, loop, or pad to 15/25/30 seconds. Use 0.3–0.5 seconds of headroom before the first phrase and at least 1 second after the final phrase. Do not pad a cut with an accidental frozen frame; finish on a moving, semantically relevant shot whenever possible.
 7. **Do not use native-audio cut gates.** Since all source audio is muted, ASR on source clips is diagnostic only. Validate the unified narration against the final picture and reject incomplete sentence tails or audio/picture drift.
 8. **Keep evidence and media separate.** Preserve source files. Write derivatives, EDLs, transcripts, renders, and QA under the run's `edit/` (or `renders/`) directory.
 9. **Score before choosing.** Run the reusable asset-diversity and dynamic-ending scorers before delivery; use their results to trigger another AI edit pass, not as a replacement for visual review.
@@ -40,7 +40,7 @@ Every completed run should contain:
 | 3. Generate | identity/usage refs, keyframes, visual-only clips | accepted asset library and reserve set |
 | 4. Audio first | complete Japanese script, one GEM-3.1-TTS track, one soft BGM bed | narration text/audio, word/phrase timing, audio provenance |
 | 5. Video-use edit | inventory, transcript cache, visual checks, EDL, strategy confirmation | `edit/transcripts/`, `takes_packed.md`, `edit/edl.json`, annotation plan |
-| 6. Render | per-segment extraction, concat, product annotations, optional subtitles last, audio mix | preview and final MP4 |
+| 6. Render | per-segment extraction, concat to narration-derived runtime, product annotations, optional subtitles last, audio mix | preview and final MP4 |
 | 7. Release QA | technical, semantic, audio, market and dynamic-ending checks | QA report, hashes, delivery manifest |
 
 ## 0. Route and initialize
@@ -89,7 +89,7 @@ Treat every generated clip as visual-only B-roll. Inventory any source audio for
 
 Write one complete, natural Japanese narration for the whole ad in the frozen market profile. Do not generate per-shot fragments and do not let shot selection rewrite the script after TTS. The default narration provider is **GEM-3.1-TTS** via the maintained updrama adapter; use one provider-supported voice for the entire run. Retain the task receipt, returned audio, script, and word-level timing.
 
-Use one continuous, soft BGM bed for the full runtime. The default candidate is **Suno v4.5 instrumental**; request no vocals and record provenance/license. Mix the BGM approximately **8–12 dB below the narration** (measure relative integrated/short-term loudness, not only a raw gain value), add gentle head/tail fades, and keep narration, BGM, and annotation assets separate until the final mix. All source-clip audio is muted before concatenation. If paid audio generation is not authorized or unavailable, use a clearly labeled approved/original fallback rather than silently changing providers. Read [references/audio_providers.md](references/audio_providers.md) before submitting either provider task. The adapters live at `scripts/providers/updrama_client.py`; they must never be called until the paid-audio gate is explicitly confirmed.
+Use one continuous, soft BGM bed for the **derived runtime**. The default candidate is **Suno v4.5 instrumental**; request no vocals and record provenance/license. Avoid continuous sine tones, single-frequency drones, or unfiltered hums: they are diagnostic fallbacks, not acceptable creative BGM. Mix the BGM approximately **8–12 dB below the narration** (measure relative integrated/short-term loudness, not only a raw gain value), add gentle head/tail fades, and keep narration, BGM, and annotation assets separate until the final mix. All source-clip audio is muted before concatenation. If paid audio generation is not authorized or unavailable, use a clearly labeled musical/original fallback (soft chord bed, filtered texture, or licensed track) rather than a monotone test tone. Read [references/audio_providers.md](references/audio_providers.md) before submitting either provider task. The adapters live at `scripts/providers/updrama_client.py`; they must never be called until the paid-audio gate is explicitly confirmed.
 
 ### Product annotations, not subtitles
 
@@ -116,7 +116,7 @@ When `video-use` is available, use it only for visual analysis, evidence-aware s
 
 After the market, claim, and paid-generation gates pass, let the AI own the editorial loop:
 
-`ingest → visual score/rank → write complete Japanese narration → GEM-3.1-TTS → draft annotations → video-use EDL → mute/concat picture → add one BGM bed (−8 to −12 dB) → preview → mechanical QA → visual QA → bounded fix loop → final`
+`ingest → visual score/rank → write complete Japanese narration → GEM-3.1-TTS → derive runtime → draft annotations → video-use EDL → mute/concat picture → add one BGM bed (−8 to −12 dB) → preview → mechanical QA → visual QA → bounded fix loop → final`
 
 The user does not need to touch a timeline. Stop only for a missing market, unsupported claim, provider/voice ambiguity, paid authorization, or the same QA failure after three fixes. This is an AI-managed montage, not an unconditional hands-off license to spend or publish.
 
@@ -131,7 +131,7 @@ All B-roll is visual-only: set source audio to `-an`/mute before concat and do n
 
 ### Strategy and EDL
 
-Describe the cut strategy in plain language and obtain confirmation before execution, unless the user's current request already specifies the strategy. Build `edit/edl.json` with absolute/portable source paths, `start`, `end`, beat/cue, evidence, reason, and expected total duration. Avoid back-to-back identical compositions. Prefer dynamic final footage over cloned last frames; a final hold is allowed only when intentional, semantically useful, and at least 1 second after speech.
+Describe the cut strategy in plain language and obtain confirmation before execution, unless the user's current request already specifies the strategy. Build `edit/edl.json` with absolute/portable source paths, `start`, `end`, beat/cue, evidence, reason, and a runtime derived from the narration audio plus explicit headroom/tail. Avoid back-to-back identical compositions. Prefer dynamic final footage over cloned last frames; a final hold is allowed only when intentional, semantically useful, and at least 1 second after speech.
 
 ### Render contract
 

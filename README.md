@@ -55,6 +55,7 @@ flowchart LR
 4. 使用一条贯穿全片的轻柔、无 vocals BGM，默认候选为 **Suno v4.5 instrumental**。
 5. 在最终时间线上测量响度，让 BGM 比旁白低 **8–12 dB**，而不是只记录一个音量倍率。
 6. 句尾、音画时长、重复句、黑帧、音画同步任一失败，都要返工而不是静默截断。
+7. 成片时长由旁白实际时长推导：`旁白时长 + 前置 headroom + 结尾 clean tail`，不写死 15/25/30 秒。
 
 ## 技术亮点
 
@@ -96,14 +97,18 @@ GET  /v1/media/status?task_id=...
 
 每次任务保留 model、prompt hash、voice、task id、时间和结果地址；adapter import 或 dry-run 都不会偷偷发起付费请求。
 
-### 5. 两层评分让“好不好”可观测
+### 5. 音频不是测试信号
+
+程序化 fallback 不能使用持续单频正弦波、嗡嗡 drone 或未经滤波的底噪。优先使用 Suno 无人声器乐；未授权付费 provider 时，使用和弦式、滤波后的原创音床，并在最终时间线上测量旁白与 BGM 的 8–12 dB 相对差。
+
+### 6. 两层评分让“好不好”可观测
 
 - **素材多样性评分**：镜头角度 40%、variant 唯一性 25%、语义标签扩散 20%、元数据完整度 15%，另加跨买点复用惩罚/奖励。
 - **动态结尾评分**：结尾帧差异运动量、尾段来源多样性、冻结/克隆惩罚，输出 `dynamic / borderline / static_risk`。
 
 默认阈值：素材多样性 `<65` 或动态结尾 `<70` 时自动触发重新排 EDL；`borderline` 必须进入视觉复核。
 
-### 6. 可审计的本地渲染
+### 7. 可审计的本地渲染
 
 优先使用 Kinocut 的 typed workflow、`doctor`、preflight、receipt 和 release checkpoint；没有 Kinocut 时使用同一 EDL 规则的 FFmpeg fallback。渲染顺序固定为：
 
@@ -131,6 +136,7 @@ git clone https://github.com/peipeijiang/product-ugc-montage.git ~/.agents/skill
 
 ```bash
 python3 ~/.agents/skills/product-ugc-montage/scripts/check_env.py --edit-dir ./edit
+python3 ~/.agents/skills/product-ugc-montage/scripts/derive_runtime.py ./edit/narration_ja.wav -o ./edit/runtime.json
 python3 ~/.agents/skills/product-ugc-montage/scripts/validate_annotations.py ./edit/product_annotation_plan.json
 python3 ~/.agents/skills/product-ugc-montage/scripts/score_asset_library.py ./asset_library/library_manifest.json
 python3 ~/.agents/skills/product-ugc-montage/scripts/score_dynamic_ending.py ./edit/final.mp4 --edl ./edit/video_use_edl.json
@@ -163,6 +169,7 @@ product-ugc-montage/
 │   └── video_use_risks.md
 └── scripts/
     ├── providers/updrama_client.py
+    ├── derive_runtime.py
     ├── qa_unified_audio.py
     ├── render_annotations.py
     ├── score_asset_library.py
