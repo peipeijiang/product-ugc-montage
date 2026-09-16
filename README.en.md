@@ -42,7 +42,7 @@ flowchart LR
 | 2. Claims | Map buyer problem to visible proof moments | `claim-ledger.json`, benefit ladder | Every line has an evidence source |
 | 3. Library | Build multi-angle B-roll and reject identity drift | `library_manifest.json`, reserve set | Identity, usage, L1/L2 QC pass |
 | 4. Batch plan | Compute the combination ceiling, review cap, and recommendation | `variant_batch_plan.json` | User confirms `N` before parallel renders |
-| 5. Narration | Write one complete, natural Japanese narration | `narration_ja.txt` | Complete sentences, locale consistency |
+| 5. Narration | Write one complete Japanese narration; audition GEM and Doubao female voices | `narration_ja.txt` | Complete sentences, locale and commerce-style voice |
 | 6. Audio | Generate one GEM track and a pool of passing BGM candidates | Audio, timings, provider receipts | Each variant BGM is 8–12 dB below narration |
 | 7. Editorial | Analyze picture and select shots by selling point | One EDL per variant | Shots prove the claims; ending stays dynamic |
 | 8. Render | Mute sources, parallelize picture assembly, mix, and annotate | Preview / final MP4 set | CFR, 9:16, no black frames or jumps |
@@ -51,7 +51,7 @@ flowchart LR
 ## Seven immutable audio rules
 
 1. Write **one complete Japanese narration** before timing shots.
-2. Use one voice to create one complete **GEM-3.1-TTS** narration track; do not create per-shot fragments.
+2. Use one voice to create one complete **GEM-3.1-TTS** or **Doubao TTS 2.0** narration track; audition female voices first and do not create per-shot fragments.
 3. Mute every source-clip audio stream; source ASR is diagnostic only.
 4. Use a pool of passing, soft, instrumental BGM candidates; **Suno v4.5 instrumental** is the default candidate, not a mandatory model.
 5. Measure the final timeline and keep BGM **8–12 dB below narration**, rather than documenting only a gain multiplier.
@@ -179,7 +179,8 @@ product-ugc-montage/
 ├── agents/openai.yaml               # Codex display metadata
 ├── references/
 │   ├── audio_contract.md             # unified audio contract
-│   ├── audio_providers.md            # GEM/Suno adapter notes
+│   ├── audio_providers.md            # GEM/Doubao/Suno adapter notes
+│   ├── audio_research_industry.md   # Industry audio model and workflow research
 │   ├── product_annotation.schema.json
 │   ├── product_annotation_template.json
 │   ├── tool_research.md

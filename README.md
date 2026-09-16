@@ -42,7 +42,7 @@ flowchart LR
 | 2. Claims | 将买家问题映射到可见证明瞬间 | `claim-ledger.json`、benefit ladder | 每条文案都有证据来源 |
 | 3. Library | 生成/整理多角度 B-roll，淘汰身份漂移 | `library_manifest.json`、reserve set | 通过 identity、usage、L1/L2 QC |
 | 4. Batch plan | 计算组合上限、可复核上限和建议批量 | `variant_batch_plan.json` | 用户确认 `N` 后才并发渲染 |
-| 5. Narration | 写一条完整自然的日语旁白 | `narration_ja.txt` | 句子完整、市场语言一致 |
+| 5. Narration | 写一条完整自然的日语旁白；比较 GEM 与豆包女声候选 | `narration_ja.txt` | 句子完整、市场语言一致、音色适合当地带货 |
 | 6. Audio | GEM-3.1-TTS 单轨；准备多个合格 BGM 候选 | 音频、时间戳、provider receipts | 每个变体 BGM 低 8–12 dB |
 | 7. Editorial | 只分析画面、按买点选择镜头 | 每个变体一份 EDL | 镜头证明买点、结尾有动态 |
 | 8. Render | 静音源片、并发拼接、混音、叠加标注 | preview / final MP4 set | CFR、9:16、无黑帧/跳切 |
@@ -51,7 +51,7 @@ flowchart LR
 ## 七条不可变音频规则
 
 1. 先写**一条完整的日语旁白**，再决定镜头时长。
-2. 用同一个 voice 生成一条完整的 **GEM-3.1-TTS** 音轨，不把旁白拆成镜头碎片。
+2. 用同一个 voice 生成一条完整的 **GEM-3.1-TTS** 或 **豆包 TTS 2.0** 音轨，不把旁白拆成镜头碎片；默认先 audition 女声，再选适合当地带货风格的音色。
 3. 所有源片音频统一 `mute` / `-an`；源片 ASR 只能帮助理解画面，不能进入最终混音。
 4. 使用通过质检的轻柔、无 vocals BGM 候选池；默认候选为 **Suno v4.5 instrumental**，不是强制模型。
 5. 在最终时间线上测量响度，让 BGM 比旁白低 **8–12 dB**，而不是只记录一个音量倍率。
@@ -172,6 +172,10 @@ provider adapter 支持 dry-run：
 python3 ~/.agents/skills/product-ugc-montage/scripts/providers/updrama_client.py gem \
   'このテントは広くて、日差しや雨の日にも使いやすいです。' \
   --voice-id Zephyr --dry-run
+
+python3 ~/.agents/skills/product-ugc-montage/scripts/providers/updrama_client.py doubao \
+  'このテントは広くて、日差しや雨の日にも使いやすいです。' \
+  --voice-id <catalog-japanese-female> --emotion calm --dry-run
 ```
 
 真实调用需要 `UPDRAMA_API_KEY`，并且必须在提交前获得明确的付费授权。
@@ -185,7 +189,8 @@ product-ugc-montage/
 ├── agents/openai.yaml               # Codex 展示信息
 ├── references/
 │   ├── audio_contract.md             # 统一音频契约
-│   ├── audio_providers.md            # GEM/Suno adapter 说明
+│   ├── audio_providers.md            # GEM/Doubao/Suno adapter 说明
+│   ├── audio_research_industry.md   # 原生音频、AI 配乐与配音选型
 │   ├── product_annotation.schema.json
 │   ├── product_annotation_template.json
 │   ├── tool_research.md

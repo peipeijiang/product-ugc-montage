@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Small, dependency-free updrama adapter for GEM-3.1-TTS and Suno v4.5.
+"""Small, dependency-free updrama adapter for GEM-3.1-TTS, Doubao TTS 2.0, and Suno v4.5.
 
 No request is made on import. Callers must explicitly invoke create_* and must
 obtain user authorization before doing so. Credentials are read from
@@ -88,6 +88,36 @@ class UpdramaClient:
             raise UpdramaError("voice_id is required for GEM-3.1-TTS")
         return self.create("gem-3.1-tts", script, {"voice_id": voice_id})
 
+    def create_doubao_tts(
+        self,
+        script: str,
+        voice_id: str,
+        *,
+        speech_rate: str = "0",
+        emotion: str = "auto",
+        emotion_scale: str = "4",
+        audio_format: str = "mp3",
+    ) -> TaskReceipt:
+        """Create one complete Doubao TTS 2.0 narration.
+
+        The provider docs contain both ``voice_id`` and a legacy ``speaker``
+        example. The current request schema uses ``voice_id``; callers should
+        query the live voice catalog and pass a compatible Japanese female
+        preset. ``emotion_scale`` is omitted for ``auto`` per the documented
+        parameter linkage rule.
+        """
+        if not voice_id:
+            raise UpdramaError("voice_id is required for Doubao TTS 2.0")
+        params: dict[str, Any] = {
+            "voice_id": voice_id,
+            "speech_rate": str(speech_rate),
+            "emotion": emotion,
+            "format": audio_format,
+        }
+        if emotion != "auto":
+            params["emotion_scale"] = str(emotion_scale)
+        return self.create("doubao-tts-2.0", script, params)
+
     def create_suno_instrumental(self, style_prompt: str, model_version: str = "chirp-v4-5") -> TaskReceipt:
         params = {"make_instrumental": "instrumental", "mv": model_version}
         return self.create("suno-v4.5", style_prompt, params)
@@ -133,18 +163,35 @@ class UpdramaClient:
 
 def main() -> int:
     import argparse
-    parser = argparse.ArgumentParser(description="updrama GEM/Suno adapter; --dry-run never calls the API")
-    parser.add_argument("provider", choices=("gem", "suno"))
+    parser = argparse.ArgumentParser(description="updrama GEM/Doubao/Suno adapter; --dry-run never calls the API")
+    parser.add_argument("provider", choices=("gem", "doubao", "suno"))
     parser.add_argument("prompt")
     parser.add_argument("--voice-id")
+    parser.add_argument("--speech-rate", default="0")
+    parser.add_argument("--emotion", default="auto")
+    parser.add_argument("--emotion-scale", default="4")
+    parser.add_argument("--format", dest="audio_format", default="mp3")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
     if args.dry_run:
-        params = {"voice_id": args.voice_id} if args.provider == "gem" else {"make_instrumental": "instrumental", "mv": "chirp-v4-5"}
-        print(json.dumps({"model": "gem-3.1-tts" if args.provider == "gem" else "suno-v4.5", "prompt": args.prompt, "params": params, "dry_run": True}, ensure_ascii=False, indent=2))
+        if args.provider == "gem":
+            model, params = "gem-3.1-tts", {"voice_id": args.voice_id}
+        elif args.provider == "doubao":
+            model = "doubao-tts-2.0"
+            params = {"voice_id": args.voice_id, "speech_rate": args.speech_rate, "emotion": args.emotion, "format": args.audio_format}
+            if args.emotion != "auto":
+                params["emotion_scale"] = args.emotion_scale
+        else:
+            model, params = "suno-v4.5", {"make_instrumental": "instrumental", "mv": "chirp-v4-5"}
+        print(json.dumps({"model": model, "prompt": args.prompt, "params": params, "dry_run": True}, ensure_ascii=False, indent=2))
         return 0
     client = UpdramaClient()
-    receipt = client.create_gem_tts(args.prompt, args.voice_id or "") if args.provider == "gem" else client.create_suno_instrumental(args.prompt)
+    if args.provider == "gem":
+        receipt = client.create_gem_tts(args.prompt, args.voice_id or "")
+    elif args.provider == "doubao":
+        receipt = client.create_doubao_tts(args.prompt, args.voice_id or "", speech_rate=args.speech_rate, emotion=args.emotion, emotion_scale=args.emotion_scale, audio_format=args.audio_format)
+    else:
+        receipt = client.create_suno_instrumental(args.prompt)
     print(json.dumps(receipt.as_dict(), ensure_ascii=False, indent=2))
     return 0
 
