@@ -8,6 +8,7 @@ Read this reference when the run will generate new narration or BGM. It records 
 - Create: `POST /v1/media/generate` with `{ "model":"gem-3.1-tts", "prompt": <target-language script>, "params": { "voice_id": <provider-supported voice> } }`.
 - Poll: `GET /v1/media/status?task_id=<id>` every 3–5 seconds until `is_final === true`; accept only `state === "success"`, then fetch `result_url`.
 - Use a single Japanese-market voice for the whole run. Query the provider's current voice/model catalog; do not assume the `gem-2.5-tts` voice-list endpoint or a hard-coded voice is valid for GEM-3.1-TTS.
+- Prefer presets whose catalog description suggests relaxed, smooth, or conversational delivery for lifestyle UGC; avoid an overly excited/company-announcer preset when the brief is meant to sound human. Treat this as a candidate choice, not a guarantee: listen to a short sample or generated track and re-run runtime/QA after any voice change.
 - Save task ID, voice ID, model, prompt hash, result URL, duration, and provider cost in the run manifest. Keep the script and audio as separate artifacts.
 - Run word-level ASR on the returned audio, check the final word and clean tail, and never trim a sentence to force a runtime.
 
