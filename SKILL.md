@@ -135,7 +135,7 @@ Describe the cut strategy in plain language and obtain confirmation before execu
 
 ### Render contract
 
-Use `video-use/helpers/render.py` for visual analysis/EDL when available, then use Kinocut's typed workflow or a deterministic FFmpeg fallback for the actual mix/render:
+Use `video-use/helpers/render.py` for visual analysis/EDL when available, then use Kinocut's typed workflow or a deterministic FFmpeg fallback for the actual mix/render. If the workspace checkout exists at `./agents/kinocut`, prefer its isolated `./agents/kinocut/.venv/bin/kino` after `kino doctor --json` confirms core readiness:
 
 1. extract each segment separately;
 2. apply any grade per segment;

@@ -19,6 +19,17 @@ Kinocut is the preferred deterministic render and release-check backend when ins
 
 For this skill, Kinocut should receive a **video-only EDL** from the editorial planner, then add the single complete GEM narration and one continuous BGM bed. Keep its human visual/audio review checkpoint even when the surrounding loop is automated.
 
+The local reference checkout can be installed without touching system Python:
+
+```bash
+cd ./agents/kinocut
+uv venv --python 3.12 .venv
+uv pip install --python .venv/bin/python -e '.[image,audio-enhanced]'
+PATH="$PWD/.venv/bin:$PATH" kino doctor --json
+```
+
+Use `./agents/kinocut/.venv/bin/kino` (or the equivalent absolute path) for this workspace. Core rendering works with FFmpeg alone; Hyperframes, Whisper, Demucs, and Torch remain optional integrations.
+
 ### MoneyPrinterTurbo
 
 MoneyPrinterTurbo is useful as an orchestration reference, not as the product-claim or editor authority. Its reusable shape is:
