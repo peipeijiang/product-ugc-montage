@@ -11,9 +11,15 @@ This workflow is visual-only at the source-clip level. Smart editing analyzes pi
 5. Mute or strip every source audio stream before segment extraction/concat.
 6. Mix narration and BGM only after the video-only base is assembled.
 
+## Native video audio versus soundtrack lane
+
+The final music lane is generated or selected **after** the rough visual EDL and complete narration exist. Do not ask a video model to bake the final music into each clip: native audio is commonly coupled to the generated picture and cannot be cleanly swapped across variants. If native audio is unavoidable, request visual-first output (`no dialogue, no vocals, no music; subtle diegetic ambience only`) and strip it before concatenation. Keep native audio only when a verified product sound effect is itself part of the selling point.
+
+For stronger musicality, the candidate pool may use Suno v4.5 instrumental, Lyria 3.5, or a licensed library; Lyria RealTime/video-to-music systems are an experimental adaptive path. Stable Audio Open, MusicGen, and ACE-Step are local fallback tools for short motifs, transitions, and texture, not a mandatory long-form score. See `audio_research_industry.md` for the rationale and model matrix.
+
 ## Mix target
 
-Measure narration and each assigned BGM on the final timeline using integrated or short-term loudness. Keep BGM approximately **8–12 dB below narration**, with gentle head/tail fades. A raw volume multiplier alone is not sufficient evidence of compliance. Avoid continuous sine tones, single-frequency drones, audible loop seams, vocals, dramatic drops, or unfiltered hums; use a musical/chordal, filtered texture or an approved/licensed instrumental bed. If the selected model repeatedly fails these checks, switch provider or use a licensed/original track and record the failed candidate. Store the measured values, candidate ID, provider, and method in the QA report.
+Measure narration and each assigned BGM on the final timeline using integrated or short-term loudness. Keep BGM approximately **8–12 dB below narration**, preferably with speech-triggered sidechain/compressor ducking plus gentle head/tail fades. A raw volume multiplier alone is not sufficient evidence of compliance. Avoid continuous sine tones, single-frequency drones, audible loop seams, vocals, dramatic drops, or unfiltered hums; use a musical/chordal, filtered texture or an approved/licensed instrumental bed. If the selected model repeatedly fails these checks, switch provider or use a licensed/original track and record the failed candidate. Store the measured values, candidate ID, provider, prompt, and method in the QA report.
 
 ## Required automated checks
 
