@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://codex.local/product-ugc-forge/product-annotation.schema.json",
+  "title": "Product Annotation Plan",
+  "description": "Claim-linked on-screen product callouts; this is not a narration subtitle track.",
+  "type": "object",
+  "required": ["version", "market_profile_id", "canvas", "style", "annotations"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {"const": 1},
+    "market_profile_id": {"type": "string", "minLength": 1},
+    "canvas": {"type": "string", "pattern": "^[0-9]+x[0-9]+$"},
+    "style": {"$ref": "#/$defs/style"},
+    "annotations": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/annotation"}}
+  },
+  "$defs": {
+    "annotation": {
+      "type": "object",
+      "required": ["id", "start", "end", "text", "claim_id", "evidence", "anchor", "animation"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-zA-Z0-9_-]+$"},
+        "start": {"type": "number", "minimum": 0},
+        "end": {"type": "number", "exclusiveMinimum": 0},
+        "text": {"type": "string", "minLength": 1, "maxLength": 80},
+        "claim_id": {"type": "string", "minLength": 1},
+        "evidence": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+        "anchor": {"enum": ["center", "upper-middle", "lower-middle", "left-middle", "right-middle"]},
+        "animation": {"enum": ["none", "fade", "slide-up", "slide-left", "scale-in"]},
+        "accent_text": {"type": "string", "maxLength": 32},
+        "proof_moment": {"type": "string", "maxLength": 160}
+      }
+    },
+    "style": {
+      "type": "object",
+      "required": ["template_id", "card", "text", "accent", "safe_zone"],
+      "additionalProperties": false,
+      "properties": {
+        "template_id": {"type": "string", "minLength": 1},
+        "card": {
+          "type": "object",
+          "required": ["color", "opacity", "padding_px"],
+          "additionalProperties": false,
+          "properties": {
+            "color": {"type": "string", "pattern": "^#[0-9A-Fa-f]{6}$"},
+            "opacity": {"type": "number", "minimum": 0, "maximum": 1},
+            "padding_px": {"type": "number", "minimum": 0},
+            "corner_radius_px": {"type": "number", "minimum": 0}
+          }
+        },
+        "text": {
+          "type": "object",
+          "required": ["font_family", "font_size_px", "color", "outline_px"],
+          "additionalProperties": false,
+          "properties": {
+            "font_family": {"type": "string", "minLength": 1},
+            "font_size_px": {"type": "number", "minimum": 12},
+            "color": {"type": "string", "pattern": "^#[0-9A-Fa-f]{6}$"},
+            "outline_px": {"type": "number", "minimum": 0}
+          }
+        },
+        "accent": {"type": "string", "pattern": "^#[0-9A-Fa-f]{6}$"},
+        "safe_zone": {
+          "type": "object",
+          "required": ["x_min", "x_max", "y_min", "y_max"],
+          "additionalProperties": false,
+          "properties": {
+            "x_min": {"type": "number", "minimum": 0, "maximum": 1},
+            "x_max": {"type": "number", "minimum": 0, "maximum": 1},
+            "y_min": {"type": "number", "minimum": 0, "maximum": 1},
+            "y_max": {"type": "number", "minimum": 0, "maximum": 1}
+          }
+        }
+      }
+    }
+  }
+}
