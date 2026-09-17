@@ -61,12 +61,13 @@ def overlap_ratio(a,b):
     right={s['visual_cluster_id'] for s in b}
     return len(left & right)/max(1,len(left))
 
-def plan(data,root,include_reserve=False,cap=12,recommended=6,selected=None,
+def plan(data,root,include_reserve=False,cap=20,recommended=20,selected=None,
          max_pairwise_overlap=.34):
     if any(not isinstance(v,int) or isinstance(v,bool) or v<1 for v in (cap,recommended)):
         raise ValueError('caps must be positive integers')
-    if selected is not None and (not isinstance(selected,int) or isinstance(selected,bool)):
-        raise ValueError('selected N must be an integer')
+    if selected is not None and (type(selected) is not int or selected < 1):
+        raise ValueError('selected N must be a positive integer')
+    target = selected if selected is not None else recommended
     if not 0<=max_pairwise_overlap<=1:
         raise ValueError('max_pairwise_overlap must be within 0..1')
     shots=accepted_shots(data,root,include_reserve)
@@ -74,8 +75,6 @@ def plan(data,root,include_reserve=False,cap=12,recommended=6,selected=None,
     if not points or len(set(points))!=len(points):
         raise ValueError('unique selling point IDs required')
     choices=[[s for s in shots if p in s['claim_ids']] for p in points]
-    if any(not c for c in choices):
-        raise ValueError('every selling point needs a QC-passed shot range')
     order_ceiling=math.factorial(len(points))
     shot_ceiling=math.prod(len(c) for c in choices)
     theoretical=order_ceiling*shot_ceiling
@@ -94,7 +93,12 @@ def plan(data,root,include_reserve=False,cap=12,recommended=6,selected=None,
     selected_candidates=[]
     hook_counts={p:0 for p in points}
     while pool and len(selected_candidates)<cap:
-        valid=[candidate for candidate in pool if all(
+        valid=[candidate for candidate in pool
+               if candidate[1][0].get('hook_eligible') is True
+               and candidate[1][0]['out']-candidate[1][0]['in'] >= 3
+               and all(candidate[1][0]['visual_cluster_id'] != old[1][0]['visual_cluster_id']
+                       and not overlap(candidate[1][0], old[1][0]) for old in selected_candidates)
+               and all(
             overlap_ratio(candidate[1],old[1])<=max_pairwise_overlap
             for old in selected_candidates)]
         if not valid:
@@ -129,20 +133,22 @@ def plan(data,root,include_reserve=False,cap=12,recommended=6,selected=None,
             'alignment_contract':'narration cue, picture shot and annotation must use the same claim_id'
         })
     hard_cap=len(previews)
-    if not hard_cap:
-        raise ValueError('no non-overlapping low-repeat combinations; expand/review the shot library')
-    if selected is not None and not 1<=selected<=hard_cap:
-        raise ValueError(f'selected N must be 1..{hard_cap}')
     zero_reuse_upper_bound=min(len({s['visual_cluster_id'] for s in c}) for c in choices)
-    initial=min(recommended,hard_cap)
-    minimum_test=3
-    readiness='ready' if initial>=minimum_test else 'expand_library'
+    initial=min(target,hard_cap)
+    readiness='ready' if hard_cap>=target else 'expand_library'
     return {
-        'schema_version':3,
+        'schema_version':4,
+        'target_videos':target,
+        'status':readiness,
+        'candidate_shortfall':max(0,target-hard_cap),
+        'distinct_hook_count':len({s['visual_cluster_id'] for s in shots
+                                   if s.get('hook_eligible') is True and s['out']-s['in']>=3}),
         'market_profile_id':data['market_profile_id'],
         'market_profile_sha256':data['market_profile_sha256'],
         'selling_point_count':len(points),
         'accepted_shot_count':len(shots),
+        'accepted_proofs_by_claim':{p:len(c) for p,c in zip(points,choices)},
+        'missing_claim_ids':[p for p,c in zip(points,choices) if not c],
         'theoretical_ceiling':theoretical,
         'theoretical_order_permutations':order_ceiling,
         'theoretical_shot_combinations':shot_ceiling,
@@ -153,28 +159,27 @@ def plan(data,root,include_reserve=False,cap=12,recommended=6,selected=None,
         'zero_reuse_batch_upper_bound':zero_reuse_upper_bound,
         'reviewable_hard_cap':hard_cap,
         'tiktok_release_recommendation':{
-            'minimum_meaningful_test_batch':minimum_test,
             'recommended_initial_batch':initial,
-            'review_ceiling_per_round':min(12,hard_cap),
+            'requested_batch':target,
+            'review_ceiling_per_round':hard_cap,
             'status':readiness,
             'guidance':(
-                f'Publish/test {initial} distinct variants first; scale toward 8-12 only after '
-                'results and only when the validated library sustains the same overlap limit.'
+                f'{target} picture candidates found; per-video narration/runtime and release QA still required.'
                 if readiness=='ready' else
-                f'Only {initial} sufficiently distinct variants are available; expand the '
-                f'library to at least {minimum_test} before calling it a TikTok test batch.'
+                f'Only {hard_cap} distinct-opening candidates found for target {target}; '
+                'expand/review hooks and proof coverage, or ask user to reduce the target. Never pad.'
             )
         },
         'recommended_batch':initial,
-        'selected_n':selected,
-        'user_choice_required':selected is None,
+        'selected_n':target,
+        'user_choice_required':False,
         'candidate_preview':previews,
         'policy':{
             'multi_claim_source':'A 10-second source may prove multiple claims only as separate QC-passed shot ranges.',
             'alignment':'Narration cues, picture ranges and annotations share claim_id and output timing.',
             'order':'Each changed selling-point order requires a new complete narration and QA.',
             'per_video_narration':'Each selected video needs its own complete script and independent TTS job; unchanged successful jobs resume without resubmission.',
-            'duplication':'No repeated range or visual cluster inside a variant; batch pairwise overlap is bounded.'
+            'duplication':'No repeated opening range/cluster across variants; body pairwise overlap is bounded.'
         }
     }
 
@@ -182,8 +187,8 @@ def main():
     ap=argparse.ArgumentParser(description=__doc__)
     ap.add_argument('manifest',type=Path)
     ap.add_argument('--include-reserve',action='store_true')
-    ap.add_argument('--review-cap',type=int,default=12)
-    ap.add_argument('--recommended',type=int,default=6)
+    ap.add_argument('--review-cap',type=int,default=20)
+    ap.add_argument('--recommended',type=int,default=20,help='target when --selected-n is omitted')
     ap.add_argument('--selected-n',type=int)
     ap.add_argument('--max-pairwise-overlap',type=float,default=.34)
     ap.add_argument('-o','--output',type=Path)
@@ -198,7 +203,7 @@ def main():
         if args.output:
             args.output.write_text(payload+'\n')
         print(payload)
-        return 0
+        return 0 if result['status']=='ready' else 2
     except (ValueError,OSError,KeyError) as exc:
         print(json.dumps({'status':'blocked','error':str(exc)},ensure_ascii=False))
         return 2

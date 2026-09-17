@@ -18,10 +18,12 @@
 flowchart LR
     A[市场/产品 URL] --> B[证据采集与产品认知]
     B --> C[声明台账 Claim Ledger]
-    C --> D[素材库与买点标签]
+    C --> P[默认20条/反推素材预算]
+    P --> O[10秒 Omni 全能参考生成]
+    O --> D[模型视频/卖点时间段索引]
     D --> E[画面分析/镜头排序]
     C --> F[完整目标市场语言旁白]
-    F --> G[GEM-3.1-TTS 单轨]
+    F --> G[每条独立 GEM/豆包完整音轨]
     G --> H[统一音频混音]
     E --> I[video-use EDL]
     I --> J[视频静音拼接]
@@ -40,10 +42,10 @@ flowchart LR
 | 0. Route | 识别 URL、素材库和目标市场 | `market-profile.json` | 国家、语言、平台明确并冻结 |
 | 1. Evidence | 采集商品图、SKU、规格和页面限制 | `product_manifest.json`、`image_analysis.json` | 素材与证据一一对应 |
 | 2. Claims | 将买家问题映射到可见证明瞬间 | `claim-ledger.json`、benefit ladder | 每条文案都有证据来源 |
-| 3. Library | 生成/整理多角度 B-roll，淘汰身份漂移 | `library_manifest.json`、reserve set | 通过 identity、usage、L1/L2 QC |
-| 4. Batch plan | 计算组合上限、可复核上限和建议批量 | `variant_batch_plan.json` | 用户确认 `N` 后才并发渲染 |
+| 3. Budget / Library | 从默认 20 条反推素材与卖点；生成 10s Omni 全能参考视频 | 素材预算、分镜矩阵、模型回执、镜头索引 | 不允许商品图转视频、Veo、首尾帧替代 |
+| 4. Batch plan | 卖点重排、独立开头、去重及容量验证 | `variant_batch_plan.json` | 达到请求数量；不足报告缺口，不凑数 |
 | 5. Narration | 写一条完整自然的目标市场语言旁白；比较 符合市场音色配置的 GEM 与豆包候选 | `narration_<locale>.txt` | 句子完整、市场语言一致、音色适合当地带货 |
-| 6. Audio | GEM-3.1-TTS 单轨；准备多个合格 BGM 候选 | 音频、时间戳、provider receipts | 每个变体 BGM 低 8–12 dB |
+| 6. Audio | 每条独立 GEM/豆包完整音轨；BGM 可适当共用 | 独立 task ID、音频 hash、时间戳 | 禁止共用配音；BGM 低 8–12 dB |
 | 7. Editorial | 只分析画面、按买点选择镜头 | 每个变体一份 EDL | 镜头证明买点、结尾有动态 |
 | 8. Render | 静音源片、并发拼接、混音、叠加标注 | preview / final MP4 set | CFR、9:16、无黑帧/跳切 |
 | 9. Release | 每个变体自动检查并限次返工 | `qa-report.json`、delivery manifest | 全部质量门禁通过 |
@@ -107,13 +109,13 @@ GET  /v1/media/status?task_id=...
 ### 6. 两层评分让“好不好”可观测
 
 - **素材多样性评分**：角度唯一性 35%、范围唯一性 25%、语义标签扩散 20%、覆盖度 20%；重叠范围或重复视觉簇会直接使选定编辑不可用。
-- **动态结尾评分**：结尾帧差异运动量、尾段来源多样性、冻结/克隆惩罚，输出 `dynamic / borderline / static_risk`。
+- **动态结尾评分**：检查无标注画面的尾段运动量，输出 `dynamic / needs_visual_review`，避免把文字动画误当作产品运动。
 
-默认阈值：素材多样性 `<65` 或动态结尾 `<70` 时自动触发重新排 EDL；`borderline` 必须进入视觉复核。
+默认阈值：素材多样性 `<65` 或动态结尾 `<70` 时进入复核，确认缺陷再重新排 EDL；评分不等于视觉质量证明。
 
 ### 7. 一次理解、多条并发混剪
 
-素材库完成并通过 QC 后，运行：
+默认目标是 **20 条不同开头的混剪视频**：先从已确认卖点反推素材预算和 10 秒分镜，再生成、质检、记录实际卖点时间段，最后验证容量：
 
 ```bash
 python3 ~/.agents/skills/product-ugc-montage/scripts/plan_variant_batch.py \
@@ -124,11 +126,13 @@ python3 ~/.agents/skills/product-ugc-montage/scripts/plan_variant_batch.py \
 规划器会给出：
 
 - 理论组合数：各买点镜头选择的笛卡尔积；
-- 可复核硬上限：默认 12 条，避免近似重复和 QA 失控；
-- 推荐首批：默认 6 条，用于第一轮 A/B 测试；
-- 必须由用户决定的 `N`。
+- 默认目标和搜索上限 20 条，用户明确数量可覆盖；
+- 实际独立开头数量、低重复候选数量、还差多少条；
+- 每条前 3 秒不得复用同一视觉簇或重叠源片范围，卖点顺序可变化。
 
-某次素材库运行可能得到 48 个理论组合；该数字只是数学上限，不是固定结果，也不是发布建议。实际输出由去重、范围冲突、视觉簇重用和 QA 决定；每条仍需独立 EDL、旁白、标注、BGM、动态结尾和发布门禁。用户确认 `N` 后，AI 才并发生成 `N` 条变体，默认 worker pool 为 `min(N, 4)`，可按主机 CPU/GPU 调整。
+保守预算示例：3 个已确认且兼容的卖点、目标 20 条，规划 20 个不同开头的 10 秒素材容器，另加 25% 淘汰余量，共 **25 条待审批源素材**；每条安排 2–3 个可独立取用的证明镜头。这是有假设的预算，不是固定最低值，也不保证必出 20 条。实际时长、生成失败或近似重复会触发补素材建议，不会强行定格/循环。
+
+网页商品图只能作为模型参考，不能直接变成广告镜头。`generate_montage_sources.py` 强制 Omni 全能参考 + 10 秒；入库核验模型回执、参考哈希、真实视频时长和运动复核。`validate_batch.py` 拒绝跨视频重复完整脚本、配音音频/任务及开头；合格 BGM 可适当共用。另需对所有成片的前 3 秒做实际视觉对比，不能只换文案或裁切冒充新开头。完整协议见 [批量生产契约](references/batch_production.md)。
 
 ### 8. 可审计的本地渲染
 
@@ -160,7 +164,7 @@ git clone https://github.com/peipeijiang/product-ugc-montage.git ~/.agents/skill
 python3 ~/.agents/skills/product-ugc-montage/scripts/check_env.py --edit-dir ./edit --market-profile ./analysis/market-profile.json
 python3 ~/.agents/skills/product-ugc-montage/scripts/fingerprint_shots.py ./asset_library/library-draft.json -o ./asset_library/library-indexed.json
 python3 ~/.agents/skills/product-ugc-montage/scripts/plan_variant_batch.py ./asset_library/library-indexed.json --include-reserve -o ./edit/variant_batch_plan.json
-# 计划器会在素材库完成后给出 TikTok 建议：最低 3 条、首批推荐 6 条、单轮审阅最多 12 条；实际数量受去重能力约束。
+# 生成前先运行 plan_source_budget.py；生成后默认验证 20 条容量，不足退出 2 并报告缺口。
 # 完整 EDL、标注渲染、动态结尾和音频 QA 命令见 references/executable_contracts.md。
 ```
 

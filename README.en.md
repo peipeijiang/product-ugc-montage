@@ -18,10 +18,12 @@ The user does not need to touch a timeline. The skill can draft the script, call
 flowchart LR
     A[Market / Product URL] --> B[Evidence capture & product cognition]
     B --> C[Claim ledger]
-    C --> D[Tagged asset library]
+    C --> P[Default 20 ads / source budget]
+    P --> O[10s Omni all-purpose reference generation]
+    O --> D[Generated video / proof range index]
     D --> E[Visual analysis / shot ranking]
     C --> F[Complete target-language narration]
-    F --> G[GEM-3.1-TTS single track]
+    F --> G[Separate full GEM/Doubao track per video]
     G --> H[Unified audio mix]
     E --> I[video-use EDL]
     I --> J[Mute & concatenate picture]
@@ -40,10 +42,10 @@ flowchart LR
 | 0. Route | Identify URL, library, and target market | `market-profile.json` | Country, language, and platform frozen |
 | 1. Evidence | Capture product images, SKU, specs, and limitations | `product_manifest.json`, `image_analysis.json` | Evidence and assets map one-to-one |
 | 2. Claims | Map buyer problem to visible proof moments | `claim-ledger.json`, benefit ladder | Every line has an evidence source |
-| 3. Library | Build multi-angle B-roll and reject identity drift | `library_manifest.json`, reserve set | Identity, usage, L1/L2 QC pass |
-| 4. Batch plan | Compute the combination ceiling, review cap, and recommendation | `variant_batch_plan.json` | User confirms `N` before parallel renders |
+| 3. Budget / Library | Reverse-plan from 20 ads and generate 10s Omni all-purpose-reference sources | Source budget, beat matrix, receipts, shot index | No page-image footage, Veo or first/last-frame substitutes |
+| 4. Batch plan | Vary claim order, require independent openings, validate capacity | `variant_batch_plan.json` | Meet requested count or report shortfall; never pad |
 | 5. Narration | Write one complete target-language narration; audition GEM and Doubao market-compatible voices | `narration_<locale>.txt` | Complete sentences, locale and commerce-style voice |
-| 6. Audio | Generate one GEM track and a pool of passing BGM candidates | Audio, timings, provider receipts | Each variant BGM is 8–12 dB below narration |
+| 6. Audio | Separate full GEM/Doubao task for every video; selectively shared BGM | Unique task IDs/audio hashes, timings | No shared narration; BGM 8–12 dB below speech |
 | 7. Editorial | Analyze picture and select shots by selling point | One EDL per variant | Shots prove the claims; ending stays dynamic |
 | 8. Render | Mute sources, parallelize picture assembly, mix, and annotate | Preview / final MP4 set | CFR, 9:16, no black frames or jumps |
 | 9. Release | Run checks per variant and perform bounded revisions | `qa-report.json`, delivery manifest | All quality gates pass |
@@ -107,13 +109,13 @@ Procedural fallbacks must not use a continuous single-frequency sine wave, hummi
 ### 6. Two scores make quality observable
 
 - **Asset diversity**: angle uniqueness 35%, range uniqueness 25%, semantic tag spread 20%, and coverage 20%; overlapping ranges or repeated visual clusters invalidate a selected edit.
-- **Dynamic ending**: tail-frame motion, tail-source diversity, and freeze/clone penalty; outputs `dynamic`, `borderline`, or `static_risk`.
+- **Dynamic ending**: motion in the clean picture tail; outputs `dynamic` or `needs_visual_review`, without mistaking annotation animation for product movement.
 
-Default thresholds: diversity `<65` or dynamic ending `<70` automatically triggers EDL revision; `borderline` requires visual review.
+Default thresholds: diversity `<65` or ending `<70` requires visual review and revision when a defect is confirmed. Heuristic scores do not prove perceptual quality.
 
 ### 7. One visual understanding, many parallel montages
 
-After the asset library passes QC, run:
+Default target: **20 distinct-opening ads**. Budget sources and proof beats before generation, then record observed ranges and validate actual post-QC capacity:
 
 ```bash
 python3 ~/.agents/skills/product-ugc-montage/scripts/plan_variant_batch.py \
@@ -121,7 +123,11 @@ python3 ~/.agents/skills/product-ugc-montage/scripts/plan_variant_batch.py \
   -o ./edit/variant_batch_plan.json
 ```
 
-The planner computes selling-point order permutations plus shot choices, then removes overlapping ranges and duplicate/near-duplicate visual clusters. It reports the theoretical ceiling, zero-reuse capacity, enforced pairwise visual-overlap limit, actual review cap, and TikTok recommendation: 3 is the minimum meaningful test, 6 is the preferred first batch when the library supports it, and 12 is the maximum one-round review/export set. Every selected variant receives its own content-matched narration script, TTS receipt, EDL and QA. Only after the user confirms `N` does the agent render independently QA'd variants in parallel.
+The planner reports theoretical combinations, actual candidates, unique hooks and shortfall against target 20 (or the explicit user count). No two outputs may reuse an opening visual cluster or overlapping source range in their first 3s. Claim order may vary; changing text/crop/music alone is not a new opening. Insufficient capacity exits 2 rather than silently shrinking or padding the batch.
+
+Conservative example: three compatible confirmed claims and 20 requested ads imply 20 planned independent opening containers plus 25% reserve: **25 proposed 10s source requests**, each covering 2–3 separately usable proof beats. This is an assumption-based budget, not a universal minimum or a guarantee. Real narration runtime, failures and visual duplication can require extra sources.
+
+Product-page photos are reference/evidence only, never timeline footage. `generate_montage_sources.py` fixes Omni all-purpose references and 10s; source admission checks canonical receipts, hashes, decoded video duration and observed motion QC. `validate_batch.py` rejects repeated scripts, narration audio/tasks and opening footage; passing BGM may be shared selectively. Actual rendered-opening comparison and per-video release QA remain mandatory. See the [batch production contract](references/batch_production.md).
 
 ### 8. Auditable local rendering
 
@@ -154,8 +160,8 @@ Run local checks first:
 python3 ~/.agents/skills/product-ugc-montage/scripts/check_env.py --edit-dir ./edit --market-profile ./analysis/market-profile.json
 python3 ~/.agents/skills/product-ugc-montage/scripts/fingerprint_shots.py ./asset_library/library-draft.json -o ./asset_library/library-indexed.json
 python3 ~/.agents/skills/product-ugc-montage/scripts/plan_variant_batch.py ./asset_library/library-indexed.json --include-reserve -o ./edit/variant_batch_plan.json
-# Once the library is complete, the planner recommends at least 3 variants,
-# an initial batch of 6 when distinct assets support it, and at most 12 per review round.
+# Run plan_source_budget.py BEFORE generation; post-QC planning targets 20 by default.
+# A capacity shortfall is reported with exit 2, never silently padded or reduced.
 # See references/executable_contracts.md for complete EDL, overlay, ending and audio QA commands.
 ```
 

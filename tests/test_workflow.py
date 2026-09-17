@@ -32,20 +32,28 @@ class WorkflowTests(unittest.TestCase):
         self.root=Path(self.tmp.name)
         self.source=self.root/'source.mp4'
         self.source.write_bytes(b'not video: identity-only unit fixture')
+        # These unit fixtures test range/EDL logic, not media provenance.
+        self.source_gate=patch('contracts.validate_source')
+        self.source_gate.start()
+        self.addCleanup(self.source_gate.stop)
     def tearDown(self):
         self.tmp.cleanup()
     def library(self):
         shots=[]
         for i in range(6):
-            a,b=i*2,i*2+1
-            shots.append({'shot_id':f's{i}','source_id':'container','file':str(self.source),
-                'source_sha256':digest(self.source),'source_duration':12,'in':a,'out':b,
+            a,b=(i%3)*3,(i%3)*3+3
+            source=self.root/f'container-{i//3}.mp4'
+            source.write_bytes(f'identity-only fixture {i//3}'.encode())
+            shots.append({'shot_id':f's{i}','source_id':f'container-{i//3}','file':str(source),
+                'source_sha256':digest(source),'source_duration':10,'in':a,'out':b,'hook_eligible':True,
                 'claim_ids':['a' if i<3 else 'b'],'evidence':['page#claim'],'angle':f'角度 {i}',
+                'proof_moment':f'proof fixture {i}',
                 'creative_slot_id':f'slot-{i}','visual_fingerprint':f'{i+1:048x}',
                 'visual_cluster_id':f'vc-{i}',
                 'market_profile_id':'market','market_profile_sha256':'a'*64,'status':'accepted','reserve':False,
-                'qc':{'status':'pass','source_sha256':digest(self.source),'in':a,'out':b},
-                'dedup':{'status':'pass','source_sha256':digest(self.source),'in':a,'out':b,
+                'qc':{'status':'pass','source_sha256':digest(source),'in':a,'out':b,
+                      'generated_motion':True,'reviewer':'test','evidence':['synthetic test only']},
+                'dedup':{'status':'pass','source_sha256':digest(source),'in':a,'out':b,
                          'visual_fingerprint':f'{i+1:048x}','visual_cluster_id':f'vc-{i}'}})
         return {'schema_version':2,'market_profile_id':'market','market_profile_sha256':'a'*64,
                 'selling_points':[{'id':'a'},{'id':'b'}],'shots':shots}
@@ -96,7 +104,7 @@ class WorkflowTests(unittest.TestCase):
         lib=self.library()
         lib['shots']=lib['shots'][:1]
         lib['shots'][0]['claim_ids']=['a','b']
-        with self.assertRaises(ValueError): plan(lib,self.root)
+        self.assertEqual(plan(lib,self.root)['status'],'expand_library')
     def test_near_duplicate_active_clusters_block(self):
         lib=self.library()
         lib['shots'][1]['visual_cluster_id']=lib['shots'][0]['visual_cluster_id']
@@ -110,17 +118,20 @@ class WorkflowTests(unittest.TestCase):
         for p in range(6):
             for v in range(4):
                 i=p*4+v
-                a=i*.4; b=a+.3
+                a=0; b=3
+                source=self.root/f'proof-{i}.mp4'
+                source.write_bytes(f'test identity {i}'.encode())
                 fp=f'{i+100:048x}'; cluster=f'vc-{i}'
                 lib['shots'].append({'shot_id':f's{i}','source_id':f'container-{i//3}',
-                  'file':str(self.source),'source_sha256':digest(self.source),'source_duration':12,
-                  'in':a,'out':b,'claim_ids':[f'p{p}'],'evidence':['page#claim'],
-                  'angle':f'angle {v}','creative_slot_id':f'slot-{i}',
+                  'file':str(source),'source_sha256':digest(source),'source_duration':10,
+                  'in':a,'out':b,'hook_eligible':True,'claim_ids':[f'p{p}'],'evidence':['page#claim'],
+                  'angle':f'angle {v}','creative_slot_id':f'slot-{i}','proof_moment':f'proof fixture {i}',
                   'visual_fingerprint':fp,'visual_cluster_id':cluster,
                   'market_profile_id':'market','market_profile_sha256':'a'*64,
                   'status':'accepted','reserve':False,
-                  'qc':{'status':'pass','source_sha256':digest(self.source),'in':a,'out':b},
-                  'dedup':{'status':'pass','source_sha256':digest(self.source),'in':a,'out':b,
+                  'qc':{'status':'pass','source_sha256':digest(source),'in':a,'out':b,
+                        'generated_motion':True,'reviewer':'test','evidence':['fixture only']},
+                  'dedup':{'status':'pass','source_sha256':digest(source),'in':a,'out':b,
                            'visual_fingerprint':fp,'visual_cluster_id':cluster}})
         result=plan(lib,self.root,cap=12,recommended=6)
         self.assertEqual(result['tiktok_release_recommendation']['recommended_initial_batch'],6)
@@ -131,11 +142,12 @@ class WorkflowTests(unittest.TestCase):
     def test_multi_claim_ten_second_source_is_range_indexed(self):
         lib=self.library()
         # One 10-second container contributes distinct, non-overlapping proof beats.
-        self.assertEqual({s['source_id'] for s in lib['shots']},{'container'})
+        self.assertEqual(len({s['source_id'] for s in lib['shots']}),2)
         self.assertEqual(len(accepted_shots(lib,self.root)),6)
     def test_multi_claim_generation_matrix_and_hook_balance(self):
         plan={'market_profile_id':'market','market_profile_sha256':'a'*64,
-              'selling_points':[{'id':'a'},{'id':'b'},{'id':'c'}],'containers':[]}
+              'model':'omni-flash-10s','reference_mode':'omni-reference','target_videos':3,
+              'selling_points':[{'id':p,'status':'confirmed','evidence':['page#'+p]} for p in 'abc'],'containers':[]}
         pairs=[('a','b'),('b','c'),('c','a')]
         for i,(hook,other) in enumerate(pairs):
             plan['containers'].append({'container_id':f'c{i}','duration':10,
@@ -173,7 +185,7 @@ class WorkflowTests(unittest.TestCase):
         edl={k:narration[k] for k in ('market_profile_id','narration_id','script_sha256','audio_sha256','market_profile_sha256')}
         edl.update(runtime=1,segments=[{'shot_id':'s0','in':0,'out':1,'timeline_start':0,'timeline_end':1}])
         self.assertEqual(validate_edl(edl,narration,shots,'market'),[])
-        edl['segments'][0].update(shot_id='s3',**{'in':6,'out':7})
+        edl['segments'][0].update(shot_id='s3',**{'in':0,'out':1})
         self.assertTrue(validate_edl(edl,narration,shots,'market'))
         edl['segments'][0]['speed']=1.2
         self.assertIn('speed changes/freeze padding are not allowed',validate_edl(edl,narration,shots,'market'))
@@ -182,7 +194,7 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn('repeated visual cluster inside the edit', validate_edl(
             {**edl,'runtime':2,'segments':[
                 {'shot_id':'s0','in':0,'out':1,'timeline_start':0,'timeline_end':1},
-                {'shot_id':'s1','in':2,'out':3,'timeline_start':1,'timeline_end':2}]},
+                {'shot_id':'s1','in':3,'out':4,'timeline_start':1,'timeline_end':2}]},
             {**narration,'cues':[{'id':'c1','start':0,'end':2,'claim_ids':['a']}]},shots2,'market'))
     def test_market_languages_and_all_animation_modes(self):
         for locale in ('en-US','ja-JP'):

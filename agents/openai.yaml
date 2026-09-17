@@ -1,7 +1,7 @@
 interface:
   display_name: "Product UGC Montage"
-  short_description: "从商品证据、素材库到 video-use 广告成片"
-  default_prompt: "Use $product-ugc-montage to lock the market, collect product evidence, rank visual shots, write one complete target-language narration, generate one GEM-3.1-TTS track, mix one soft BGM bed 8–12 dB below speech, add product annotations, then render and QA with video-use plus Kinocut/FFmpeg."
+  short_description: "从商品证据反推 10 秒 Omni 素材，批量混剪不同开头的广告"
+  default_prompt: "Use $product-ugc-montage to plan 20 distinct-opening ads by default, budget evidence-backed 10s Omni all-purpose-reference sources, create a separate complete GEM/Doubao narration for each video, selectively share soft BGM, then render product annotations and run per-video and batch QA."
 
 policy:
   allow_implicit_invocation: true

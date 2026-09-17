@@ -2,6 +2,8 @@
 
 Read before invoking local helpers. These helpers do not create a complete ad on their own; the agent still performs product vision, approved copywriting, actual ASR and perceptual review. Never fabricate their evidence to satisfy a gate. All files live under the current run; old renders remain untouched.
 
+Read [batch_production.md](batch_production.md) for the default-20 pre-generation budget, mandatory Omni/10s/all-purpose route, canonical source provenance and independent narration/opening batch gate. These requirements also apply to existing libraries; missing evidence is not grandfathered in.
+
 ## Market binding
 
 Freeze `market-profile.json` with `id`, `country`, `region`, `locale` (BCP-47, e.g. `ja-JP` or `en-US`), `language` (ASR language code, e.g. `ja` or `en`), `script`, `currency`, `casting_profile`, `scene_context`, `voice_profile`, `subtitle_style`, and `typography: {font_family, font_file, font_index: 0}`. Font path may be absolute or relative to the profile. Select a locally installed font that covers the actual copy. Neither Japanese nor a female voice is a global default. Gender/style, pronunciation, persons, scene and all generated spoken/visible language come from this profile.
@@ -10,7 +12,7 @@ Hash the profile and pass it to generation prompts, narration, EDL and annotatio
 
 ## Shot library and narration-aligned EDL
 
-Before paid multi-claim source generation, write a `source-container-plan.json` and run `validate_generation_matrix.py`. Each 10-second container carries 2–3 compatible `claim_ids`, a `hook_claim_id`, `hook_payoff_by <= 3`, contiguous beats covering 0–10 seconds with one `claim_id` and proof moment per beat, a unique `creative_slot_id`, and non-empty `scene_geometry`, `camera_distance`, `camera_motion`, `creator_staging`, and `proof_composition`. The hook is balanced across the batch. Exact repetition across all five visual axes is rejected. This lets a paid 10-second request cover several claims without turning it into an uncut ten-second montage unit or duplicating the same picture design.
+Before paid source generation, write a `source-container-plan.json` and run `validate_generation_matrix.py`. Set `model`, `reference_mode:"omni-reference"`, `target_videos` (default 20), market ID/hash and evidence-backed confirmed `selling_points`. Budget at least one distinct opening container per target. Each 10s container carries 2–3 compatible `claim_ids` (one if only one is supported), `variant_id`, `hook_claim_id`, `hook_payoff_by <= 3`, a first beat lasting at least 3s, contiguous beats covering 0–10s with claim/proof per beat, unique `creative_slot_id`, and all five creative axes. Hook claims are balanced; repeated visual treatments are rejected. This structure does not itself prove actual visual diversity.
 
 ```bash
 python3 scripts/validate_generation_matrix.py edit/source-container-plan.json \
@@ -23,19 +25,22 @@ Library shape:
 {"schema_version":2,"market_profile_id":"jp-run-01","market_profile_sha256":"<profile SHA256>",
  "selling_points":[{"id":"coverage"}],
  "shots":[{"shot_id":"s01","source_id":"container-01","file":"clips/01.mp4",
- "source_sha256":"<actual SHA256>","source_duration":10.0,"in":0.4,"out":3.1,
+ "source_sha256":"<actual SHA256>","source_duration":10.0,"in":0.0,"out":3.1,
+ "generation_root":"/absolute/canonical/product","hook_eligible":true,
  "claim_ids":["coverage"],"evidence":["product-brief#coverage"],"angle":"wide result",
+ "proof_moment":"observed wide view demonstrating coverage",
  "creative_slot_id":"coverage-wide-family-A","visual_fingerprint":"<three-frame dHash>",
  "visual_cluster_id":"vc-0001","market_profile_id":"jp-run-01",
  "market_profile_sha256":"<profile SHA256>","status":"accepted","reserve":false,
- "qc":{"status":"pass","source_sha256":"<same SHA256>","in":0.4,"out":3.1},
+ "qc":{"status":"pass","source_sha256":"<same SHA256>","in":0.0,"out":3.1,
+ "generated_motion":true,"reviewer":"actual reviewer","evidence":["observed product/action motion"]},
  "dedup":{"status":"pass","method":"three-frame-dhash-v1","source_sha256":"<same SHA256>",
- "in":0.4,"out":3.1,"visual_fingerprint":"<same fingerprint>","visual_cluster_id":"vc-0001"}}]}
+ "in":0.0,"out":3.1,"visual_fingerprint":"<same fingerprint>","visual_cluster_id":"vc-0001"}}]}
 ```
 
 Probe the actual source duration and inspect each accepted range before recording it. One ten-second source may contain two or three non-overlapping claim proofs; these are different shots. QC for a different range/hash is stale. First create a draft with source/range fields, then run `fingerprint_shots.py draft.json -o indexed.json`; visually verify the groupings before accepting/rejecting shots. Mechanical dHash is deliberately conservative and does not replace visual review. Active `creative_slot_id`, source-range signatures and visual clusters must be unique; duplicate/near-duplicate alternatives belong in reserve/rejected. Legacy whole-container manifests must be migrated from observed boundaries, not mechanically guessed.
 
-`plan_variant_batch.py` varies selling-point order and shot selection. It rejects repeated ranges/clusters inside a cut and limits pairwise cluster overlap across candidates (default 0.34). It reports the factorial/Cartesian upper bound, valid review cap, zero-reuse mathematical upper bound, the number of zero-reuse candidates actually found by bounded search, and the TikTok recommendation. Operational default: 3 is the minimum useful test batch, 6 is the recommended initial batch when the library supports it, and 12 is the maximum one-round review/export set. If fewer than 3 survive, expand the library instead of publishing a padded “test.” Pass `--selected-n N` only if the user already chose N. Each selected video requires its own content-matched complete narration, generated as a separate job in the TTS batch. Shared-narration alternatives in planner metadata do not override this per-video requirement.
+`plan_variant_batch.py` varies selling-point order and shots, rejects repeated ranges/clusters within a cut and repeated openings across the batch, and limits pairwise body cluster overlap (default 0.34). Default target and search cap are 20. `--selected-n N` overrides the target; raise `--review-cap` too for N > 20. The planner saves actual capacity and shortfall and exits 2 when insufficient. Every first shot needs `hook_eligible:true` and at least 3 seconds. Theoretical combinations are not guaranteed release capacity. Run `validate_batch.py` to reject shared complete narration scripts, audio hashes or task IDs, and repeated opening footage. Selectively shared BGM is allowed.
 
 Narration manifest: `market_profile_id`, `narration_id`, `script_sha256`, `audio_sha256`, and `cues: [{id,start,end,claim_ids}]`. Cue times are on the **output timeline**, including narration delay. Split mixed-claim sentences into smaller semantic cues. A claim-neutral hook/lifestyle/CTA must also have an explicitly approved semantic tag in both cue and shot metadata; never assign false product claims merely to pass.
 

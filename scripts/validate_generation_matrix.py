@@ -5,12 +5,25 @@ import json
 from collections import Counter
 from pathlib import Path
 from contracts import number
+from source_policy import model_id
 
 AXES=('scene_geometry','camera_distance','camera_motion','creator_staging','proof_composition')
 
 def validate(data):
     errors=[]
     points=[p.get('id') for p in data.get('selling_points',[])]
+    try:
+        model_id(data.get('model'))
+    except ValueError as exc:
+        errors.append(str(exc))
+    if data.get('reference_mode') != 'omni-reference':
+        errors.append('reference_mode must be omni-reference; first/last frames are forbidden')
+    if any(p.get('status')!='confirmed' or not p.get('evidence') for p in data.get('selling_points',[])):
+        errors.append('only confirmed evidence-backed selling points are permitted')
+    target=data.get('target_videos',20)
+    if type(target) is not int or target<1:
+        errors.append('target_videos must be a positive integer')
+        target=20
     if not data.get('market_profile_id') or len(str(data.get('market_profile_sha256','')))!=64:
         errors.append('market profile ID/hash required')
     if not points or None in points or len(points)!=len(set(points)):
@@ -18,6 +31,8 @@ def validate(data):
     containers=data.get('containers',[])
     if not containers:
         return errors+['containers required'],{}
+    if len(containers)<target:
+        errors.append('budget at least one distinct opening container per target video before generation')
     ids,slots,signatures=set(),set(),set()
     hook_counts=Counter()
     proof_counts=Counter()
@@ -27,9 +42,11 @@ def validate(data):
         if not ident or ident in ids: errors.append(prefix+' duplicate/missing container_id')
         ids.add(ident)
         if item.get('duration')!=10: errors.append(prefix+' duration must be 10')
+        if item.get('model',data.get('model'))!=data.get('model') or item.get('reference_mode','omni-reference')!='omni-reference':
+            errors.append(prefix+' cannot override the approved model/reference route')
         claims=item.get('claim_ids',[])
-        if not 2<=len(claims)<=3 or len(claims)!=len(set(claims)) or not set(claims)<=set(points):
-            errors.append(prefix+' needs 2-3 unique known claim_ids')
+        if not min(2,len(points))<=len(claims)<=3 or len(claims)!=len(set(claims)) or not set(claims)<=set(points):
+            errors.append(prefix+' needs 2-3 unique known claim_ids (one if only one confirmed claim exists)')
         hook=item.get('hook_claim_id')
         if hook not in claims: errors.append(prefix+' hook_claim_id must be in claim_ids')
         else: hook_counts[hook]+=1
@@ -58,6 +75,8 @@ def validate(data):
         if seen_claims!=set(claims): errors.append(prefix+' every container claim needs a proof beat')
         if not beats or beats[0].get('claim_id')!=hook or beats[0].get('start')!=0:
             errors.append(prefix+' first beat must start with the hook claim')
+        if not beats or not number(beats[0].get('end')) or beats[0]['end']<3:
+            errors.append(prefix+' reserve at least 3 continuous seconds for the opening proof')
         payoff=item.get('hook_payoff_by')
         if not number(payoff) or payoff>3 or payoff<=0:
             errors.append(prefix+' hook_payoff_by must be within the first 3 seconds')

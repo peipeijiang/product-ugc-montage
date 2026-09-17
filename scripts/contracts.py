@@ -4,6 +4,7 @@ import hashlib
 import json
 import math
 from pathlib import Path
+from source_policy import validate_source
 
 def digest(path):
     h = hashlib.sha256()
@@ -42,7 +43,8 @@ def accepted_shots(data, root, include_reserve=False):
         if shot.get('status') != 'accepted' or (shot.get('reserve') and not include_reserve):
             continue
         required = ('shot_id', 'source_id', 'file', 'source_sha256', 'claim_ids', 'angle',
-                    'market_profile_id', 'creative_slot_id', 'visual_fingerprint', 'visual_cluster_id')
+                    'market_profile_id', 'creative_slot_id', 'visual_fingerprint', 'visual_cluster_id',
+                    'proof_moment')
         if any(not shot.get(k) for k in required):
             raise ValueError('accepted shot missing identity, evidence or market metadata')
         if shot['shot_id'] in ids:
@@ -54,7 +56,8 @@ def accepted_shots(data, root, include_reserve=False):
         a, b = shot.get('in'), shot.get('out')
         if not number(a) or not number(b) or not 0 <= a < b:
             raise ValueError(f'invalid shot range: {shot["shot_id"]}')
-        if not number(shot.get('source_duration')) or b > shot['source_duration']:
+        if (not number(shot.get('source_duration')) or b > shot['source_duration']
+                or abs(shot['source_duration']-10)>.12):
             raise ValueError('shot exceeds probed source_duration')
         if shot['market_profile_id'] != data['market_profile_id']:
             raise ValueError('shot market differs from library market')
@@ -67,6 +70,7 @@ def accepted_shots(data, root, include_reserve=False):
         path = path.resolve()
         if path not in hashes:
             hashes[path] = digest(path)
+            validate_source(path, shot, hashes[path])
         if hashes[path] != shot['source_sha256']:
             raise ValueError(f'stale source hash: {path}')
         signature = (hashes[path], a, b)
@@ -83,6 +87,8 @@ def accepted_shots(data, root, include_reserve=False):
         if (qc.get('status') != 'pass' or qc.get('source_sha256') != hashes[path]
                 or qc.get('in') != a or qc.get('out') != b):
             raise ValueError(f'current range-level QC required: {shot["shot_id"]}')
+        if qc.get('generated_motion') is not True or not qc.get('reviewer') or not qc.get('evidence'):
+            raise ValueError('observed generated motion required; still pans/zoomed page images are not footage')
         dedup = shot.get('dedup', {})
         if (dedup.get('status') != 'pass'
                 or dedup.get('source_sha256') != hashes[path]
