@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import shutil
 import subprocess
 from pathlib import Path
@@ -27,8 +28,9 @@ def main() -> int:
         text=True,
     )
     narration_duration = float(raw.strip())
-    if narration_duration <= 0 or args.headroom < 0 or args.clean_tail < 0:
-        raise SystemExit("narration duration must be positive; margins cannot be negative")
+    if (not all(math.isfinite(v) for v in (narration_duration,args.headroom,args.clean_tail))
+            or narration_duration <= 0 or args.headroom < 0 or args.clean_tail < 0):
+        raise SystemExit("duration and margins must be finite; duration positive and margins nonnegative")
     result = {
         "schema_version": 1,
         "narration": str(args.narration),

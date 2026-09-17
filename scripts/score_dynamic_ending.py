@@ -1,66 +1,76 @@
 #!/usr/bin/env python3
-"""Score whether a rendered ending is visually dynamic and intentional.
-
-Usage: score_dynamic_ending.py video.mp4 [--edl edl.json] [-o report.json]
-"""
-from __future__ import annotations
-
+"""Heuristic motion QA on clean picture, never text overlays or container names."""
 import argparse
 import json
 import subprocess
-import tempfile
+import math
 from pathlib import Path
+import numpy as np
+from contracts import digest
 
+def duration(path):
+    p=subprocess.run(['ffprobe','-v','error','-show_entries','format=duration',
+                      '-of','default=nw=1:nk=1',str(path)],capture_output=True,text=True,check=True)
+    value=float(p.stdout)
+    if not math.isfinite(value) or value<=0:
+        raise ValueError('video duration must be finite and positive')
+    return value
 
-def frames(video: Path, duration: float, directory: Path) -> list[Path]:
-    paths = []
-    for i, t in enumerate((max(0.0, duration - 2.0), max(0.0, duration - 1.0), max(0.0, duration - 0.15))):
-        out = directory / f"f{i}.jpg"
-        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-ss", f"{t:.3f}", "-i", str(video), "-frames:v", "1", "-vf", "scale=320:-1", str(out)], check=True)
-        paths.append(out)
-    return paths
+def measure(video, length):
+    start=max(0,length-2)
+    cmd=['ffmpeg','-v','error','-ss',str(start),'-i',str(video),'-t',str(length-start),
+         '-an','-vf','fps=8,scale=160:160,format=gray','-f','rawvideo','-']
+    p=subprocess.run(cmd,capture_output=True,check=True)
+    if len(p.stdout)%(160*160):
+        raise ValueError('malformed decoded frames')
+    frames=np.frombuffer(p.stdout,dtype=np.uint8).reshape(-1,160,160).astype(float)/255
+    if len(frames)<4:
+        raise ValueError('insufficient ending frames')
+    # Spatial gradients remove uniform exposure shifts; normalized gradients
+    # reduce contrast/fade sensitivity. Still a heuristic, not optical-flow proof.
+    gx=np.diff(frames,axis=2,append=frames[:,:,-1:])
+    gy=np.diff(frames,axis=1,append=frames[:,-1:,:])
+    edges=np.sqrt(gx*gx+gy*gy)
+    energy=edges.mean(axis=(1,2))
+    edges=edges/np.maximum(energy[:,None,None],.01)
+    changes=np.mean(np.abs(np.diff(edges,axis=0)),axis=(1,2))
+    # Ignore the largest cut flash; require sustained motion, including the tail.
+    sustained=float(np.median(changes))
+    tail=float(np.median(changes[-3:]))
+    value=round(min(100, min(sustained,tail)*240),1)
+    return value,{'sustained_edge_change':sustained,'last_frames_edge_change':tail,
+                  'samples':len(frames),'mean_texture_energy':float(energy.mean())}
 
-
-def motion_score(paths: list[Path]) -> float:
+def main():
+    ap=argparse.ArgumentParser(description=__doc__)
+    ap.add_argument('video',type=Path)
+    ap.add_argument('--video-only',required=True,type=Path,help='clean pre-overlay picture used in the render')
+    ap.add_argument('--edl',required=True,type=Path)
+    ap.add_argument('-o','--output',type=Path)
+    args=ap.parse_args()
     try:
-        from PIL import Image, ImageChops, ImageStat
-        images = [Image.open(p).convert("RGB") for p in paths]
-        diffs = []
-        for a, b in zip(images, images[1:]):
-            diffs.append(sum(ImageStat.Stat(ImageChops.difference(a, b)).mean) / (3 * 255))
-        return min(60.0, sum(diffs) / max(1, len(diffs)) * 240.0)
-    except Exception:
-        return 0.0
+        length=duration(args.video)
+        if abs(duration(args.video_only)-length)>.05:
+            raise ValueError('clean picture/final duration mismatch')
+        edl=json.loads(args.edl.read_text())
+        if edl.get('video_only_sha256')!=digest(args.video_only):
+            raise ValueError('EDL must bind the current clean picture hash')
+        tail=[s for s in edl['segments'] if s['timeline_end']>max(0,length-2)
+              and s['timeline_start']<length]
+        if not tail or abs(tail[-1]['timeline_end']-length)>.05:
+            raise ValueError('EDL has no complete output-tail coverage')
+        value,details=measure(args.video_only,length)
+        report={'scorer_version':'2.0','video':str(args.video),'video_only_sha256':digest(args.video_only),
+                'score':value,'grade':'dynamic' if value>=70 else 'needs_visual_review',
+                'tail_shot_ids':[s['shot_id'] for s in tail],'measurements':details,
+                'heuristic_only':True,'action':'Review actual tail motion. Change EDL only for an unintended static ending; intentional holds need recorded review.'}
+        print(json.dumps(report,ensure_ascii=False,indent=2))
+        if args.output:
+            args.output.write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n')
+        return 0
+    except Exception as exc:
+        print(json.dumps({'status':'incomplete','error':str(exc)}))
+        return 2
 
-
-def main() -> int:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("video", type=Path)
-    ap.add_argument("--edl", type=Path)
-    ap.add_argument("-o", "--output", type=Path)
-    args = ap.parse_args()
-    raw = subprocess.check_output(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=nw=1:nk=1", str(args.video)], text=True)
-    duration = float(raw.strip())
-    with tempfile.TemporaryDirectory(prefix="ugc-ending-") as td:
-        motion = motion_score(frames(args.video, duration, Path(td)))
-    source_bonus = 0.0
-    freeze_penalty = 0.0
-    sources: list[str] = []
-    if args.edl and args.edl.exists():
-        e = json.loads(args.edl.read_text(encoding="utf-8"))
-        ranges = e.get("ranges") or e.get("segments") or []
-        for r in ranges[-3:]:
-            sources.append(str(r.get("source", r.get("file", ""))))
-        source_bonus = 20.0 if len(set(sources)) >= 2 else 8.0
-        if any("clone" in s.lower() or "freeze" in s.lower() for s in sources):
-            freeze_penalty = 30.0
-    score = round(max(0.0, min(100.0, motion + source_bonus + 20.0 - freeze_penalty)), 1)
-    report = {"video": str(args.video), "duration_seconds": duration, "score": score, "grade": "dynamic" if score >= 70 else ("borderline" if score >= 45 else "static_risk"), "motion_component": round(motion, 1), "source_diversity_component": source_bonus, "freeze_penalty": freeze_penalty, "tail_sources": sources, "method": "frame differences at duration-2.0s, -1.0s, -0.15s plus EDL tail-source diversity"}
-    out = args.output or args.video.with_name("dynamic_ending_score.json")
-    out.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print(json.dumps(report, ensure_ascii=False, indent=2))
-    return 0
-
-
-if __name__ == "__main__":
+if __name__=='__main__':
     raise SystemExit(main())

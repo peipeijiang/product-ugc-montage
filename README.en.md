@@ -4,7 +4,7 @@
 
 > Evidence-backed product video production for TikTok, Reels, Shorts, and localized ecommerce campaigns.
 
-`product-ugc-montage` is not a random clip concatenator. It is an auditable production skill: lock the market and product evidence, let AI analyze visuals and rank shots by selling point, then deliver with one complete Japanese narration, product annotations, deterministic rendering, and automated QA.
+`product-ugc-montage` is not a random clip concatenator. It is an auditable production skill: lock the market and product evidence, let AI analyze visuals and rank shots by selling point, then deliver with one complete target-language narration, product annotations, deterministic rendering, and automated QA.
 
 ## In one sentence
 
@@ -20,7 +20,7 @@ flowchart LR
     B --> C[Claim ledger]
     C --> D[Tagged asset library]
     D --> E[Visual analysis / shot ranking]
-    C --> F[Complete Japanese narration]
+    C --> F[Complete target-language narration]
     F --> G[GEM-3.1-TTS single track]
     G --> H[Unified audio mix]
     E --> I[video-use EDL]
@@ -42,7 +42,7 @@ flowchart LR
 | 2. Claims | Map buyer problem to visible proof moments | `claim-ledger.json`, benefit ladder | Every line has an evidence source |
 | 3. Library | Build multi-angle B-roll and reject identity drift | `library_manifest.json`, reserve set | Identity, usage, L1/L2 QC pass |
 | 4. Batch plan | Compute the combination ceiling, review cap, and recommendation | `variant_batch_plan.json` | User confirms `N` before parallel renders |
-| 5. Narration | Write one complete Japanese narration; audition GEM and Doubao female voices | `narration_ja.txt` | Complete sentences, locale and commerce-style voice |
+| 5. Narration | Write one complete target-language narration; audition GEM and Doubao market-compatible voices | `narration_<locale>.txt` | Complete sentences, locale and commerce-style voice |
 | 6. Audio | Generate one GEM track and a pool of passing BGM candidates | Audio, timings, provider receipts | Each variant BGM is 8–12 dB below narration |
 | 7. Editorial | Analyze picture and select shots by selling point | One EDL per variant | Shots prove the claims; ending stays dynamic |
 | 8. Render | Mute sources, parallelize picture assembly, mix, and annotate | Preview / final MP4 set | CFR, 9:16, no black frames or jumps |
@@ -50,15 +50,15 @@ flowchart LR
 
 ## Seven immutable audio rules
 
-1. Write **one complete Japanese narration** before timing shots.
-2. Use one voice to create one complete **GEM-3.1-TTS** or **Doubao TTS 2.0** narration track; audition female voices first and do not create per-shot fragments.
+1. Write **one complete target-language narration** before timing shots.
+2. Use one voice to create one complete **GEM-3.1-TTS** or **Doubao TTS 2.0** narration track; follow the market voice profile and do not create per-shot fragments.
 3. Mute every source-clip audio stream; source ASR is diagnostic only.
 4. Use a pool of passing, soft, instrumental BGM candidates; **Suno v4.5 instrumental** is the default candidate, not a mandatory model.
 5. Measure the final timeline and keep BGM **8–12 dB below narration**, rather than documenting only a gain multiplier.
 6. Any sentence-tail, duration, duplicate-sentence, black-frame, or A/V-sync failure triggers revision instead of silent trimming.
 7. Runtime is derived from the real narration: `narration duration + headroom + clean tail`; never hard-code a 15/25/30-second target.
 
-Batch variants may reuse the same complete narration to control cost, but must not be forced onto one BGM track. For `N ≥ 4`, prepare at least two passing BGM candidates by default and assign them by mood or round-robin. If Suno output has hum, single-frequency energy, audible loop seams, vocals, or dramatic drops, mark that candidate failed and switch to an authorized provider/original instrumental; never silently reuse it.
+Every selected variant gets an independent, content-matched complete narration script and TTS job. Existing successful jobs may resume from their journal; tracks are never shared or split across videos. For `N ≥ 4`, prepare at least two passing BGM candidates and assign them by mood or round-robin; reject hum, vocals, seams and dramatic drops.
 
 ## Technical highlights
 
@@ -81,14 +81,14 @@ The claim ledger separates `confirmed`, `page_claim_needs_visual_proof`, `inferr
 Annotations are short cards bound to proof shots, not full narration captions:
 
 - JSON Schema constrains `start/end/text/claim_id/evidence/anchor/animation`;
-- warm-gray translucent card, bold white Japanese, orange `#FF6A00` accent by default;
+- warm-gray translucent card, bold white target-language text, orange `#FF6A00` accent by default;
 - safe-zone rules avoid TikTok caption/action UI;
 - timing, animation, size, and position are machine-validatable;
 - subtitles are opt-in and rendered last.
 
 ### 4. Provider adapters with receipts and authorization boundaries
 
-`scripts/providers/updrama_client.py` uses one asynchronous contract for GEM-3.1-TTS and Suno v4.5:
+`scripts/providers/updrama_client.py` uses one asynchronous contract for GEM-3.1-TTS, Doubao TTS 2.0, and Suno v4.5:
 
 ```text
 POST /v1/media/generate
@@ -102,11 +102,11 @@ Each task records model, prompt hash, voice, task id, timestamp, and result URL.
 
 ### 5. BGM is not a test signal
 
-Procedural fallbacks must not use a continuous single-frequency sine wave, humming drone, or unfiltered noise. Prefer Suno instrumental; when paid providers are not authorized, use an original chordal/filtered bed and measure the final 8–12 dB narration-to-BGM separation.
+Procedural fallbacks must not use a continuous single-frequency sine wave, humming drone, or unfiltered noise. Prefer Suno instrumental; when Suno fails, accept only a user-provided or license-confirmed local music file. No local AI music model is currently configured, so the workflow must not auto-download a model or fabricate an “original” bed; stop and report the missing fallback when no authorized file exists.
 
 ### 6. Two scores make quality observable
 
-- **Asset diversity**: angle uniqueness 40%, variant uniqueness 25%, semantic tag spread 20%, metadata completeness 15%, plus cross-selling-point reuse signal.
+- **Asset diversity**: angle uniqueness 35%, range uniqueness 25%, semantic tag spread 20%, and coverage 20%; overlapping ranges or repeated visual clusters invalidate a selected edit.
 - **Dynamic ending**: tail-frame motion, tail-source diversity, and freeze/clone penalty; outputs `dynamic`, `borderline`, or `static_risk`.
 
 Default thresholds: diversity `<65` or dynamic ending `<70` automatically triggers EDL revision; `borderline` requires visual review.
@@ -121,7 +121,7 @@ python3 ~/.agents/skills/product-ugc-montage/scripts/plan_variant_batch.py \
   -o ./edit/variant_batch_plan.json
 ```
 
-The planner reports the theoretical Cartesian combination count, a conservative reviewable hard cap (12 by default), a recommended starting batch (6 by default), and a required user choice for `N`. For the current Japanese canopy library, the reserve-inclusive theoretical ceiling is 48; the suggested first batch is 6 and the reviewable cap is 12. Theoretical combinations are not a publishing promise: collapse near-duplicates, and run independent EDL, annotation, BGM, dynamic-ending, and release checks for every selected variant. Only after the user confirms `N` does the agent render the variants in parallel, using a default worker pool of `min(N, 4)` that can be tuned to host CPU/GPU capacity.
+The planner computes selling-point order permutations plus shot choices, then removes overlapping ranges and duplicate/near-duplicate visual clusters. It reports the theoretical ceiling, zero-reuse capacity, enforced pairwise visual-overlap limit, actual review cap, and TikTok recommendation: 3 is the minimum meaningful test, 6 is the preferred first batch when the library supports it, and 12 is the maximum one-round review/export set. Every selected variant receives its own content-matched narration script, TTS receipt, EDL and QA. Only after the user confirms `N` does the agent render independently QA'd variants in parallel.
 
 ### 8. Auditable local rendering
 
@@ -151,13 +151,12 @@ git clone https://github.com/peipeijiang/product-ugc-montage.git ~/.agents/skill
 Run local checks first:
 
 ```bash
-python3 ~/.agents/skills/product-ugc-montage/scripts/check_env.py --edit-dir ./edit
-python3 ~/.agents/skills/product-ugc-montage/scripts/derive_runtime.py ./edit/narration_ja.wav -o ./edit/runtime.json
-python3 ~/.agents/skills/product-ugc-montage/scripts/plan_variant_batch.py ./asset_library/library_manifest.json --include-reserve -o ./edit/variant_batch_plan.json
-python3 ~/.agents/skills/product-ugc-montage/scripts/validate_annotations.py ./edit/product_annotation_plan.json
-python3 ~/.agents/skills/product-ugc-montage/scripts/score_asset_library.py ./asset_library/library_manifest.json
-python3 ~/.agents/skills/product-ugc-montage/scripts/score_dynamic_ending.py ./edit/final.mp4 --edl ./edit/video_use_edl.json
-python3 ~/.agents/skills/product-ugc-montage/scripts/qa_unified_audio.py ./edit/final.mp4 --narration ./edit/narration_ja.wav --bgm ./edit/bgm.wav --script ./edit/narration_ja.txt --annotations ./edit/product_annotation_plan.json
+python3 ~/.agents/skills/product-ugc-montage/scripts/check_env.py --edit-dir ./edit --market-profile ./analysis/market-profile.json
+python3 ~/.agents/skills/product-ugc-montage/scripts/fingerprint_shots.py ./asset_library/library-draft.json -o ./asset_library/library-indexed.json
+python3 ~/.agents/skills/product-ugc-montage/scripts/plan_variant_batch.py ./asset_library/library-indexed.json --include-reserve -o ./edit/variant_batch_plan.json
+# Once the library is complete, the planner recommends at least 3 variants,
+# an initial batch of 6 when distinct assets support it, and at most 12 per review round.
+# See references/executable_contracts.md for complete EDL, overlay, ending and audio QA commands.
 ```
 
 The provider adapter supports dry-run:
@@ -168,7 +167,7 @@ python3 ~/.agents/skills/product-ugc-montage/scripts/providers/updrama_client.py
   --voice-id Zephyr --dry-run
 ```
 
-A real call requires `UPDRAMA_API_KEY` and explicit paid-audio authorization immediately before submission.
+A real call requires `UPDRAMA_API_KEY`, a unique durable `--journal` per logical task, and explicit paid-audio authorization immediately before submission.
 
 ## Repository layout
 

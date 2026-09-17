@@ -39,7 +39,7 @@ MoneyPrinterTurbo is useful as an orchestration reference, not as the product-cl
 It demonstrates provider selection, reusable TTS timing, BGM file/provider selection, subtitle timing modes, and batch task control. Adapt those ideas to this skill with these deliberate changes:
 
 - replace per-provider/default TTS with the formal GEM-3.1-TTS adapter;
-- use one complete Japanese script/audio file, not per-shot narration fragments;
+- use one complete target-language script/audio file, not per-shot narration fragments;
 - disable all source audio and build a single unified final mix;
 - use one soft instrumental BGM track at 8–12 dB below narration;
 - treat product annotations as the default text layer; subtitles are opt-in and applied last;

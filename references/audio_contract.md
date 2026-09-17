@@ -4,8 +4,8 @@ This workflow is visual-only at the source-clip level. Smart editing analyzes pi
 
 ## Required order
 
-1. Write one complete Japanese narration for the whole ad.
-2. Generate one complete GEM-3.1-TTS audio file from that exact script and retain word/phrase timing.
+1. Plan each selected montage's picture sequence and claim order, then write one complete target-language narration matched to that video.
+2. Batch-submit one separate GEM-3.1-TTS job per selected video, with bounded concurrency and an independent durable journal per job. Retain each video's complete audio, receipt and word/phrase timing. N videos require N separate narration jobs; do not share a batch-wide track or split a single long recording across videos.
 3. Derive the runtime from the real narration duration: `narration_duration + headroom_before + clean_tail_after` (never a fixed 15/25/30-second target).
 4. Build a pool of soft, instrumental BGM candidates, validate each, and assign a passing candidate to each variant; fit/loop each to that derived runtime (default candidate: Suno v4.5 instrumental).
 5. Mute or strip every source audio stream before segment extraction/concat.
@@ -13,9 +13,9 @@ This workflow is visual-only at the source-clip level. Smart editing analyzes pi
 
 ## Native video audio versus soundtrack lane
 
-The final music lane is generated or selected **after** the rough visual EDL and complete narration exist. Do not ask a video model to bake the final music into each clip: native audio is commonly coupled to the generated picture and cannot be cleanly swapped across variants. Omni-Flash/native audio can be evaluated in a separate reference pass and promoted to the BGM candidate pool only when it is a coherent, no-vocal full-cut track that passes loudness, seam, hum, speech-masking and rights checks. If native audio is unavoidable, request visual-first output (`no dialogue, no vocals, no music; subtle diegetic ambience only`) and strip it before concatenation. Keep native audio only when a verified product sound effect is itself part of the selling point.
+The final music lane is generated or selected **after** the rough visual EDL and complete narration exist. Do not ask a video model to bake the final music into each clip: native audio is commonly coupled to the generated picture and cannot be cleanly swapped across variants. Omni-Flash/native audio can be evaluated in a separate reference pass and promoted to the BGM candidate pool only when it is a coherent, no-vocal full-cut track that passes loudness, seam, hum, speech-masking and rights checks. If native audio is unavoidable, request visual-first output (`no dialogue, no vocals, no music; subtle diegetic ambience only`) and strip it before concatenation. Product-sound exceptions require a separately approved workflow; this unified-audio route still mutes all source audio.
 
-For stronger musicality, the candidate pool may use Suno v4.5 instrumental, Lyria 3.5, or a licensed library; Lyria RealTime/video-to-music systems are an experimental adaptive path. Stable Audio Open, MusicGen, and ACE-Step are local fallback tools for short motifs, transitions, and texture, not a mandatory long-form score. See `audio_research_industry.md` for the rationale and model matrix.
+For stronger musicality, the current candidate pool may use Suno v4.5 instrumental or a user-provided/license-confirmed music file. Lyria, Lyria RealTime, Stable Audio Open, MusicGen and ACE-Step are future extensions only; they are not installed/configured in the current runtime and must never be called implicitly. See `audio_research_industry.md` for the capability snapshot and rationale.
 
 ## Mix target
 
@@ -24,7 +24,7 @@ Measure narration and each assigned BGM on the final timeline using integrated o
 ## Required automated checks
 
 - Compare final video duration with the narration file and verify the narration has a clean tail; reject clipped final phonemes or incomplete sentence endings.
-- Run final-audio ASR and compare the transcript to the authored Japanese script; flag missing, duplicated, or reordered sentences.
+- Run final-audio ASR and compare the transcript to the authored target-language script; flag missing, duplicated, or reordered sentences.
 - Verify every product annotation (and optional subtitle, if explicitly requested) has coverage on the output timeline, does not overlap an excluded UI safe zone, and is readable in sampled frames.
 - Verify no source audio stream survives the video-only concat and that every final master contains exactly the intended narration plus one assigned BGM bed.
 - Measure narration/BGM relative loudness and reject values outside the 8–12 dB target or speech masking at proof moments.

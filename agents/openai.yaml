@@ -1,7 +1,7 @@
 interface:
   display_name: "Product UGC Montage"
   short_description: "从商品证据、素材库到 video-use 广告成片"
-  default_prompt: "Use $product-ugc-montage to lock the market, collect product evidence, rank visual shots, write one complete Japanese narration, generate one GEM-3.1-TTS track, mix one soft BGM bed 8–12 dB below speech, add product annotations, then render and QA with video-use plus Kinocut/FFmpeg."
+  default_prompt: "Use $product-ugc-montage to lock the market, collect product evidence, rank visual shots, write one complete target-language narration, generate one GEM-3.1-TTS track, mix one soft BGM bed 8–12 dB below speech, add product annotations, then render and QA with video-use plus Kinocut/FFmpeg."
 
 policy:
   allow_implicit_invocation: true

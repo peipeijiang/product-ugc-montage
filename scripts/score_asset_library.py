@@ -1,84 +1,65 @@
 #!/usr/bin/env python3
-"""Score active asset-library diversity and write a JSON report.
-
-The score is a transparent heuristic, not a substitute for visual review.
-Usage: score_asset_library.py library_manifest.json [-o report.json]
-"""
-from __future__ import annotations
-
+"""Score accepted shot diversity; --edl scores the selected edit, not the library."""
 import argparse
 import json
 import re
-import subprocess
 from pathlib import Path
+from contracts import accepted_shots, overlap
+import itertools
 
+def token_set(text):
+    return set(re.findall(r'\w+',text.casefold(),re.UNICODE))
 
-def probe(path: Path) -> dict:
+def score(shots):
+    if not shots:
+        return 0
+    angles={s['angle'] for s in shots}
+    ranges={(s['source_sha256'],s['in'],s['out']) for s in shots}
+    tokens=set().union(*(token_set(s['angle']) for s in shots))
+    coverage=min(1,len(ranges)/3)
+    return round(100*(.35*len(angles)/len(shots)+.25*len(ranges)/len(shots)+
+                      .2*min(1,len(tokens)/3)+.2*coverage),1)
+
+def main():
+    ap=argparse.ArgumentParser(description=__doc__)
+    ap.add_argument('manifest',type=Path)
+    ap.add_argument('--edl',type=Path)
+    ap.add_argument('-o','--output',type=Path)
+    args=ap.parse_args()
     try:
-        raw = subprocess.check_output(
-            ["ffprobe", "-v", "error", "-show_entries", "format=duration:stream=width,height,r_frame_rate", "-of", "json", str(path)],
-            text=True,
-        )
-        return json.loads(raw)
-    except Exception:
-        return {}
+        data=json.loads(args.manifest.read_text())
+        shots=accepted_shots(data,args.manifest.parent,True)
+        if args.edl:
+            lookup={s['shot_id']:s for s in shots}
+            edl=json.loads(args.edl.read_text())
+            selected=[]
+            for seg in edl['segments']:
+                shot=lookup[seg['shot_id']]
+                if not shot['in']<=seg['in']<seg['out']<=shot['out']:
+                    raise ValueError('EDL range outside accepted shot')
+                selected.append({**shot,'in':seg['in'],'out':seg['out']})
+            duplicate=(any(overlap(a,b) for a,b in itertools.combinations(selected,2))
+                       or len({s['visual_cluster_id'] for s in selected})!=len(selected))
+            value=score(selected) if not duplicate else 0
+            details=[]
+            target='edl'
+            recommendation='Revise selected shot ranges/compositions; keep narration cue order.'
+        else:
+            details=[{'id':p['id'],'score':score([s for s in shots if p['id'] in s['claim_ids']])}
+                     for p in data.get('selling_points',[])]
+            value=round(sum(r['score'] for r in details)/max(1,len(details)),1)
+            target='library'
+            recommendation='Re-tag/review available assets or seek approval to expand the library; changing EDL cannot change this score.'
+        report={'scorer_version':'2.0','target':target,'score':value,'selling_points':details,
+                'grade':'usable' if value>=65 else 'needs_review',
+                'heuristic_only':True,'recommendation':recommendation}
+        print(json.dumps(report,ensure_ascii=False,indent=2))
+        if args.output:
+            args.output.write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n')
+        return 0
+    except Exception as exc:
+        print(json.dumps({'status':'incomplete','error':str(exc)}))
+        return 2
 
-
-def token_set(value: str) -> set[str]:
-    return {x for x in re.split(r"[^a-z0-9]+", value.lower()) if x}
-
-
-def main() -> int:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("manifest", type=Path)
-    ap.add_argument("-o", "--output", type=Path)
-    args = ap.parse_args()
-    d = json.loads(args.manifest.read_text(encoding="utf-8"))
-    points = d.get("selling_points") or []
-    point_reports = []
-    all_variants: list[str] = []
-    diversity_values: list[float] = []
-    completeness_values: list[float] = []
-    for point in points:
-        clips = point.get("clips") or []
-        variants = [str(c.get("variant", "")) for c in clips]
-        angles = [str(c.get("angle", "")) for c in clips]
-        unique_angles = len(set(angles)) / max(1, len(angles))
-        unique_variants = len(set(variants)) / max(1, len(variants))
-        metadata_fields = 0
-        metadata_total = max(1, len(clips) * 4)
-        for c in clips:
-            for key in ("variant", "file", "duration_s", "angle"):
-                metadata_fields += int(bool(c.get(key)))
-            all_variants.append(str(c.get("variant", "")))
-        completeness = metadata_fields / metadata_total
-        angle_tokens = set().union(*(token_set(a) for a in angles)) if angles else set()
-        semantic_spread = min(1.0, len(angle_tokens) / max(3.0, len(clips) * 2.0))
-        point_score = round(100 * (0.40 * unique_angles + 0.25 * unique_variants + 0.20 * semantic_spread + 0.15 * completeness), 1)
-        point_reports.append({"id": point.get("id"), "clip_count": len(clips), "unique_angles": len(set(angles)), "score": point_score})
-        diversity_values.append(point_score)
-        completeness_values.append(completeness)
-    cross_point_unique = len(set(all_variants)) / max(1, len(all_variants))
-    score = round((sum(diversity_values) / max(1, len(diversity_values))) * 0.85 + cross_point_unique * 15, 1)
-    report = {
-        "manifest": str(args.manifest),
-        "score": score,
-        "grade": "strong" if score >= 80 else ("usable" if score >= 65 else "needs_more_variants"),
-        "method": {"per_point": "angle uniqueness 40%, variant uniqueness 25%, semantic tag spread 20%, metadata completeness 15%", "cross_point_unique_variant_weight": 15},
-        "selling_points": point_reports,
-        "recommendations": []
-    }
-    if score < 80:
-        report["recommendations"].append("Add a materially different camera distance or interaction angle for the lowest-scoring selling point.")
-    if cross_point_unique < 0.8:
-        report["recommendations"].append("Avoid reusing the same variant or composition across selling points.")
-    if any(r["clip_count"] < 3 for r in point_reports):
-        report["recommendations"].append("Keep at least three active visual variants per confirmed selling point when budget allows.")
-    out = args.output or args.manifest.with_name("asset_diversity_score.json")
-    out.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print(json.dumps(report, ensure_ascii=False, indent=2))
-    return 0
-
-
-if __name__ == "__main__":
+if __name__=='__main__':
     raise SystemExit(main())

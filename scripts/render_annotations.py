@@ -1,51 +1,114 @@
 #!/usr/bin/env python3
-"""Convert a product_annotation_plan.json into a reusable ASS overlay."""
-from __future__ import annotations
-
+"""Render validated, market-bound annotations as separate ASS card/text layers."""
 import argparse
 import json
 from pathlib import Path
+from contracts import digest, load_market
+from validate_annotations import validate
 
-
-def ass_time(seconds: float) -> str:
+def ass_time(seconds):
     cs = int(round(seconds * 100))
     h, cs = divmod(cs, 360000)
     m, cs = divmod(cs, 6000)
     s, cs = divmod(cs, 100)
-    return f"{h}:{m:02d}:{s:02d}.{cs:02d}"
+    return f'{h}:{m:02d}:{s:02d}.{cs:02d}'
 
+def bgr(value):
+    value = value.lstrip('#')
+    return (value[4:6]+value[2:4]+value[0:2]).upper()
 
-def bgr(hex_color: str) -> str:
-    value = hex_color.lstrip("#")
-    return f"{value[4:6]}{value[2:4]}{value[0:2]}".upper()
+def rounded_rect(w, h, r):
+    # ASS cubic Bezier path; separate opaque-border styles would lose text outline.
+    w, h, r = (round(x,2) for x in (w,h,r))
+    k = r * .55228475
+    return (f'm {r} 0 l {w-r} 0 b {w-r+k} 0 {w} {r-k} {w} {r} '
+            f'l {w} {h-r} b {w} {h-r+k} {w-r+k} {h} {w-r} {h} '
+            f'l {r} {h} b {r-k} {h} 0 {h-r+k} 0 {h-r} '
+            f'l 0 {r} b 0 {r-k} {r-k} 0 {r} 0')
 
+def motion(ann, layout, animation):
+    x,y = layout['x'],layout['y']
+    mode = ann['animation']
+    ms = animation['duration_ms']
+    tail = animation['out_duration_ms'] if animation['out']=='fade' else 0
+    loc = rf'\pos({x:.2f},{y:.2f})'
+    if mode == 'slide-up':
+        loc = rf'\move({x:.2f},{y+24:.2f},{x:.2f},{y:.2f},0,{ms})'
+    if mode == 'slide-left':
+        loc = rf'\move({x+24:.2f},{y:.2f},{x:.2f},{y:.2f},0,{ms})'
+    if mode == 'scale-in':
+        loc += rf'\fscx85\fscy85\t(0,{ms},1,\fscx100\fscy100)'
+    return loc + rf'\fad({ms if mode != "none" else 0},{tail})'
 
-def main() -> int:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("plan", type=Path)
-    ap.add_argument("-o", "--output", type=Path)
-    args = ap.parse_args()
-    d = json.loads(args.plan.read_text(encoding="utf-8"))
-    width, height = (int(x) for x in d.get("canvas", "1080x1920").split("x", 1))
-    style = d["style"]
-    card, text = style["card"], style["text"]
-    back_alpha = max(0, min(255, round((1 - float(card["opacity"])) * 255)))
-    header = f"""[Script Info]\nScriptType: v4.00+\nPlayResX: {width}\nPlayResY: {height}\nScaledBorderAndShadow: yes\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: ProductTag,{text['font_family']},{int(text['font_size_px'])},&H00{bgr(text['color'])},&H00{bgr(text['color'])},&H00{bgr('#101010')},&H{back_alpha:02X}{bgr(card['color'])},1,0,0,0,100,100,0,0,3,0,0,5,{int(card['padding_px'])},{int(card['padding_px'])},0,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, Effect, Text\n"""
-    lines = [header]
-    positions = {"center": (width // 2, int(height * 0.48)), "upper-middle": (width // 2, int(height * 0.34)), "lower-middle": (width // 2, int(height * 0.62)), "left-middle": (int(width * 0.28), int(height * 0.50)), "right-middle": (int(width * 0.72), int(height * 0.50))}
-    for ann in d["annotations"]:
-        x, y = positions.get(ann.get("anchor", "lower-middle"), positions["lower-middle"])
-        rendered = str(ann["text"]).replace("\\", "\\\\").replace("{", "\\{").replace("}", "\\}")
-        accent = ann.get("accent_text")
-        if accent and accent in rendered:
-            rendered = rendered.replace(accent, "{\\c&H00" + bgr(style["accent"]) + "&}" + accent + "{\\c&H00" + bgr(text["color"]) + "&}", 1)
-        rendered = "{\\pos(%d,%d)}%s" % (x, y, rendered)
-        lines.append(f"Dialogue: 0,{ass_time(float(ann['start']))},{ass_time(float(ann['end']))},ProductTag,,0,0,0,,{rendered}\n")
-    out = args.output or args.plan.with_name("product_annotations.ass")
-    out.write_text("".join(lines), encoding="utf-8")
-    print(out)
-    return 0
+def render(data, market, layouts):
+    w,h = map(int,data['canvas'].split('x'))
+    style=data['style']
+    tx,card=style['text'],style['card']
+    font=market['typography']['font_family']
+    if any(ch in font for ch in ',\n\r'):
+        raise ValueError('invalid ASS font family')
+    header = f"""[Script Info]
+ScriptType: v4.00+
+PlayResX: {w}
+PlayResY: {h}
+ScaledBorderAndShadow: yes
+WrapStyle: 2
 
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: ProductTag,{font},{tx['font_size_px']},&H00{bgr(tx['color'])},&H00{bgr(tx['color'])},&H00{bgr(tx['outline_color'])},&H80000000,{-1 if tx['bold'] else 0},0,0,0,100,100,0,0,1,{tx['outline_px']},{tx['shadow_px']},5,0,0,0,1
 
-if __name__ == "__main__":
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+"""
+    lines=[header]
+    by_id={l['id']:l for l in layouts}
+    for ann in data['annotations']:
+        box=by_id[ann['id']]
+        tags=motion(ann,box,style['animation'])
+        alpha=round((1-card['opacity'])*255)
+        path=rounded_rect(box['width'],box['height'],card['corner_radius_px'])
+        background=rf'{{{tags}\an5\p1\bord0\shad0\1c&H{bgr(card["color"])}&\1a&H{alpha:02X}&}}'+path
+        content=ann['text']
+        if ann.get('accent_text'):
+            accent=ann['accent_text']
+            content=content.replace(accent,rf'{{\1c&H{bgr(style["accent"])}&}}'+accent+
+                                    rf'{{\1c&H{bgr(tx["color"])}&}}',1)
+        content=content.replace('\n',r'\N')
+        foreground='{'+tags+r'\q2}'+content
+        for layer,value in ((0,background),(1,foreground)):
+            lines.append(f'Dialogue: {layer},{ass_time(ann["start"])},{ass_time(ann["end"])},ProductTag,,0,0,0,,{value}\n')
+    return ''.join(lines)
+
+def main():
+    ap=argparse.ArgumentParser(description=__doc__)
+    ap.add_argument('plan',type=Path)
+    ap.add_argument('--market-profile',type=Path,required=True)
+    ap.add_argument('--claim-ledger',type=Path,required=True)
+    ap.add_argument('--duration',type=float,required=True)
+    ap.add_argument('-o','--output',type=Path)
+    args=ap.parse_args()
+    try:
+        data=json.loads(args.plan.read_text())
+        market=load_market(args.market_profile)
+        errors,layouts=validate(data,market,digest(args.market_profile),
+                               json.loads(args.claim_ledger.read_text()),args.duration)
+        if errors:
+            raise ValueError('; '.join(errors))
+        out=args.output or args.plan.with_name('product_annotations.ass')
+        out.write_text(render(data,market,layouts),encoding='utf-8')
+        receipt={'schema_version':2,'plan_sha256':digest(args.plan),
+                 'market_profile_sha256':digest(args.market_profile),
+                 'font_file':market['typography']['font_file'],
+                 'font_sha256':digest(market['typography']['font_file']),
+                 'ass_sha256':digest(out),'layouts':layouts,
+                 'required_render_step':'Load this exact font in libass fontsdir; inspect rendered frames for shaping and bounds.'}
+        out.with_suffix('.receipt.json').write_text(json.dumps(receipt,ensure_ascii=False,indent=2)+'\n')
+        print(out)
+        return 0
+    except Exception as exc:
+        print(json.dumps({'status':'blocked','error':str(exc)},ensure_ascii=False))
+        return 2
+
+if __name__=='__main__':
     raise SystemExit(main())

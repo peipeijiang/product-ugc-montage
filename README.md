@@ -4,7 +4,7 @@
 
 > Evidence-backed product video production for TikTok, Reels, Shorts, and localized ecommerce campaigns.
 
-`product-ugc-montage` 不是一个“随机拼接素材”的脚本，而是一套可审计的产品视频生产 skill：先锁定市场与产品证据，再让 AI 分析画面、按买点选镜头，最后用统一日语旁白、产品标注和自动质检交付成片。
+`product-ugc-montage` 不是一个“随机拼接素材”的脚本，而是一套可审计的产品视频生产 skill：先锁定市场与产品证据，再让 AI 分析画面、按买点选镜头，最后用统一目标市场语言旁白、产品标注和自动质检交付成片。
 
 ## 一句话定位
 
@@ -20,7 +20,7 @@ flowchart LR
     B --> C[声明台账 Claim Ledger]
     C --> D[素材库与买点标签]
     D --> E[画面分析/镜头排序]
-    C --> F[完整日语旁白]
+    C --> F[完整目标市场语言旁白]
     F --> G[GEM-3.1-TTS 单轨]
     G --> H[统一音频混音]
     E --> I[video-use EDL]
@@ -42,7 +42,7 @@ flowchart LR
 | 2. Claims | 将买家问题映射到可见证明瞬间 | `claim-ledger.json`、benefit ladder | 每条文案都有证据来源 |
 | 3. Library | 生成/整理多角度 B-roll，淘汰身份漂移 | `library_manifest.json`、reserve set | 通过 identity、usage、L1/L2 QC |
 | 4. Batch plan | 计算组合上限、可复核上限和建议批量 | `variant_batch_plan.json` | 用户确认 `N` 后才并发渲染 |
-| 5. Narration | 写一条完整自然的日语旁白；比较 GEM 与豆包女声候选 | `narration_ja.txt` | 句子完整、市场语言一致、音色适合当地带货 |
+| 5. Narration | 写一条完整自然的目标市场语言旁白；比较 符合市场音色配置的 GEM 与豆包候选 | `narration_<locale>.txt` | 句子完整、市场语言一致、音色适合当地带货 |
 | 6. Audio | GEM-3.1-TTS 单轨；准备多个合格 BGM 候选 | 音频、时间戳、provider receipts | 每个变体 BGM 低 8–12 dB |
 | 7. Editorial | 只分析画面、按买点选择镜头 | 每个变体一份 EDL | 镜头证明买点、结尾有动态 |
 | 8. Render | 静音源片、并发拼接、混音、叠加标注 | preview / final MP4 set | CFR、9:16、无黑帧/跳切 |
@@ -50,7 +50,7 @@ flowchart LR
 
 ## 七条不可变音频规则
 
-1. 先写**一条完整的日语旁白**，再决定镜头时长。
+1. 先按冻结市场写**一条完整的目标语言旁白**，再决定镜头时长。
 2. 用同一个 voice 生成一条完整的 **GEM-3.1-TTS** 或 **豆包 TTS 2.0** 音轨，不把旁白拆成镜头碎片；默认先 audition 女声，再选适合当地带货风格的音色。
 3. 所有源片音频统一 `mute` / `-an`；源片 ASR 只能帮助理解画面，不能进入最终混音。
 4. 使用通过质检的轻柔、无 vocals BGM 候选池；默认候选为 **Suno v4.5 instrumental**，不是强制模型。
@@ -58,7 +58,7 @@ flowchart LR
 6. 句尾、音画时长、重复句、黑帧、音画同步任一失败，都要返工而不是静默截断。
 7. 成片时长由旁白实际时长推导：`旁白时长 + 前置 headroom + 结尾 clean tail`，不写死 15/25/30 秒。
 
-批量变体允许复用同一条完整旁白来控制成本，但不能强制所有变体使用同一首 BGM。`N ≥ 4` 时默认准备至少两个通过质检的 BGM 候选，按情绪或轮换策略分配；若 Suno 输出出现嗡鸣、单频、明显循环接缝、人声或戏剧性 drop，则标记候选失败并切换已授权 provider/原创器乐，不静默沿用。
+每个批量变体都必须有自己的完整旁白脚本和独立 TTS 任务，不能跨视频复用或拆分音轨；不变的已成功任务可通过 journal 恢复。不同变体不能强制使用同一首 BGM。`N ≥ 4` 时默认准备至少两个通过质检的 BGM 候选，按情绪或轮换策略分配；若 Suno 输出出现嗡鸣、单频、明显循环接缝、人声或戏剧性 drop，则标记候选失败并切换已授权 provider/原创器乐，不静默沿用。
 
 ## 技术亮点
 
@@ -67,7 +67,7 @@ flowchart LR
 每个 selling point 都经过：
 
 ```text
-买家问题 → 产品干预 → 可见结果 → 证明镜头 → 日语旁白/产品标注
+买家问题 → 产品干预 → 可见结果 → 证明镜头 → 目标市场语言旁白/产品标注
 ```
 
 声明台账区分 `confirmed`、`page_claim_needs_visual_proof`、`inferred` 和 `rejected`。推断出来的面积、耐候性、配件或性能保证不会自动进入脚本。
@@ -81,14 +81,14 @@ flowchart LR
 标注不是把旁白整段烧成字幕，而是绑定到证明镜头的短卡片：
 
 - JSON Schema 约束 `start/end/text/claim_id/evidence/anchor/animation`；
-- 默认暖灰半透明卡片、白色日文粗体、橙色 `#FF6A00` 重点；
+- 默认暖灰半透明卡片、目标市场语言白色粗体、橙色 `#FF6A00` 重点；
 - 安全区避开 TikTok 底部 caption/action UI；
 - 标注时长、入场动画、字号和位置均可程序化验证；
 - 字幕仅在用户明确要求时添加，并且最后渲染。
 
-### 4. Provider adapter 有任务回执和授权边界
+### 4. Provider adapter 有任务回执、三模型适配和授权边界
 
-`scripts/providers/updrama_client.py` 对 GEM-3.1-TTS 和 Suno v4.5 使用统一异步接口：
+`scripts/providers/updrama_client.py` 对 GEM-3.1-TTS、豆包 TTS 2.0 和 Suno v4.5 使用统一异步接口：
 
 ```text
 POST /v1/media/generate
@@ -102,11 +102,11 @@ GET  /v1/media/status?task_id=...
 
 ### 5. 音频不是测试信号
 
-程序化 fallback 不能使用持续单频正弦波、嗡嗡 drone 或未经滤波的底噪。优先使用 Suno 无人声器乐；未授权付费 provider 时，使用和弦式、滤波后的原创音床，并在最终时间线上测量旁白与 BGM 的 8–12 dB 相对差。
+程序化 fallback 不能使用持续单频正弦波、嗡嗡 drone 或未经滤波的底噪。优先使用 Suno 无人声器乐；Suno 不合格时只接受用户提供或已确认授权的本地音乐文件。当前未配置本地 AI 音乐模型，也不会自动下载模型或伪造原创音床；没有授权本地音乐时，音频路径应停下并报告缺口。
 
 ### 6. 两层评分让“好不好”可观测
 
-- **素材多样性评分**：镜头角度 40%、variant 唯一性 25%、语义标签扩散 20%、元数据完整度 15%，另加跨买点复用惩罚/奖励。
+- **素材多样性评分**：角度唯一性 35%、范围唯一性 25%、语义标签扩散 20%、覆盖度 20%；重叠范围或重复视觉簇会直接使选定编辑不可用。
 - **动态结尾评分**：结尾帧差异运动量、尾段来源多样性、冻结/克隆惩罚，输出 `dynamic / borderline / static_risk`。
 
 默认阈值：素材多样性 `<65` 或动态结尾 `<70` 时自动触发重新排 EDL；`borderline` 必须进入视觉复核。
@@ -128,7 +128,7 @@ python3 ~/.agents/skills/product-ugc-montage/scripts/plan_variant_batch.py \
 - 推荐首批：默认 6 条，用于第一轮 A/B 测试；
 - 必须由用户决定的 `N`。
 
-以当前日本 canopy 素材库为例：包含 reserve 时理论组合为 48，建议首批 6，最多建议同时进入投放级复核 12 条。48 是数学组合上限，不是建议全部发布；每条仍需独立 EDL、标注、BGM、动态结尾和发布门禁。用户确认 `N` 后，AI 才并发生成 `N` 条变体，默认 worker pool 为 `min(N, 4)`，可按主机 CPU/GPU 调整。
+某次素材库运行可能得到 48 个理论组合；该数字只是数学上限，不是固定结果，也不是发布建议。实际输出由去重、范围冲突、视觉簇重用和 QA 决定；每条仍需独立 EDL、旁白、标注、BGM、动态结尾和发布门禁。用户确认 `N` 后，AI 才并发生成 `N` 条变体，默认 worker pool 为 `min(N, 4)`，可按主机 CPU/GPU 调整。
 
 ### 8. 可审计的本地渲染
 
@@ -157,13 +157,11 @@ git clone https://github.com/peipeijiang/product-ugc-montage.git ~/.agents/skill
 建议先做本地检查：
 
 ```bash
-python3 ~/.agents/skills/product-ugc-montage/scripts/check_env.py --edit-dir ./edit
-python3 ~/.agents/skills/product-ugc-montage/scripts/derive_runtime.py ./edit/narration_ja.wav -o ./edit/runtime.json
-python3 ~/.agents/skills/product-ugc-montage/scripts/plan_variant_batch.py ./asset_library/library_manifest.json --include-reserve -o ./edit/variant_batch_plan.json
-python3 ~/.agents/skills/product-ugc-montage/scripts/validate_annotations.py ./edit/product_annotation_plan.json
-python3 ~/.agents/skills/product-ugc-montage/scripts/score_asset_library.py ./asset_library/library_manifest.json
-python3 ~/.agents/skills/product-ugc-montage/scripts/score_dynamic_ending.py ./edit/final.mp4 --edl ./edit/video_use_edl.json
-python3 ~/.agents/skills/product-ugc-montage/scripts/qa_unified_audio.py ./edit/final.mp4 --narration ./edit/narration_ja.wav --bgm ./edit/bgm.wav --script ./edit/narration_ja.txt --annotations ./edit/product_annotation_plan.json
+python3 ~/.agents/skills/product-ugc-montage/scripts/check_env.py --edit-dir ./edit --market-profile ./analysis/market-profile.json
+python3 ~/.agents/skills/product-ugc-montage/scripts/fingerprint_shots.py ./asset_library/library-draft.json -o ./asset_library/library-indexed.json
+python3 ~/.agents/skills/product-ugc-montage/scripts/plan_variant_batch.py ./asset_library/library-indexed.json --include-reserve -o ./edit/variant_batch_plan.json
+# 计划器会在素材库完成后给出 TikTok 建议：最低 3 条、首批推荐 6 条、单轮审阅最多 12 条；实际数量受去重能力约束。
+# 完整 EDL、标注渲染、动态结尾和音频 QA 命令见 references/executable_contracts.md。
 ```
 
 provider adapter 支持 dry-run：
@@ -175,10 +173,10 @@ python3 ~/.agents/skills/product-ugc-montage/scripts/providers/updrama_client.py
 
 python3 ~/.agents/skills/product-ugc-montage/scripts/providers/updrama_client.py doubao \
   'このテントは広くて、日差しや雨の日にも使いやすいです。' \
-  --voice-id <catalog-japanese-female> --emotion calm --dry-run
+  --voice-id <catalog-market-compatible> --emotion calm --dry-run
 ```
 
-真实调用需要 `UPDRAMA_API_KEY`，并且必须在提交前获得明确的付费授权。
+真实调用需要 `UPDRAMA_API_KEY`，还必须提供每个逻辑任务独立的 `--journal`，并在提交前获得明确的付费授权。
 
 ## 目录结构
 

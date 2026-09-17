@@ -17,7 +17,7 @@ It must not own narration synthesis, BGM selection, or source-audio preservation
 
 - product truth, SKU identity, claim approval, or market lock;
 - paid generation authorization or provider billing;
-- choosing a valid GEM voice or a licensed BGM without a provider contract;
+- choosing a valid GEM/Doubao voice or a licensed BGM without a provider contract;
 - reliable detection of every codec/audio boundary defect without mechanical QA;
 - universal CJK/RTL subtitle rendering across FFmpeg builds and host fonts;
 - final legal/commercial approval when evidence or policy is ambiguous.
@@ -29,7 +29,7 @@ It must not own narration synthesis, BGM selection, or source-audio preservation
 - [#121 missing preflight/doctor command](https://github.com/browser-use/video-use/issues/121). Product UGC Montage should run its own environment check before paid or long renders.
 - [#64 self-evaluation and source-faithful output gaps](https://github.com/browser-use/video-use/issues/64). Pair LLM visual review with mechanical scoring and explicit output profiles.
 
-Kinocut's local `doctor`, workflow receipts, loudness/black-frame checks, and fail-closed preflight are useful compensating controls. MoneyPrinterTurbo's script → TTS → BGM → subtitles → export sequence is a reference for orchestration only; its provider defaults and subtitle-first assumptions do not override this skill's GEM-only narration, unified BGM, and product-annotation policy.
+Kinocut's local `doctor`, workflow receipts, loudness/black-frame checks, and fail-closed preflight are useful compensating controls. MoneyPrinterTurbo's script → TTS → BGM → subtitles → export sequence is a reference for orchestration only; its provider defaults and subtitle-first assumptions do not override this skill's GEM/Doubao narration audition, unified BGM, and product-annotation policy.
 
 ## Recommended autonomy contract
 

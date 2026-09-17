@@ -1,15 +1,4 @@
-[Script Info]
-ScriptType: v4.00+
-PlayResX: 1080
-PlayResY: 1920
-ScaledBorderAndShadow: yes
-
-[V4+ Styles]
-Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: ProductTag,Heiti SC,52,&H00FFFFFF,&H00FFFFFF,&H00101010,&HC76F665E,1,0,0,0,100,100,0,0,1,3,2,5,86,86,0,1
-
-[Events]
-Format: Layer, Start, End, Style, Name, MarginL, MarginR, Effect, Text
-; Replace these sample events from product_annotation_plan.json.
-Dialogue: 0,0:00:03.20,0:00:07.80,ProductTag,,0,0,0,,最大約{\c&H006A6AFF&}28㎡{\c&HFFFFFF&}の広々スペース
-Dialogue: 0,0:00:08.00,0:00:10.20,ProductTag,,0,0,0,,{\c&H006A6AFF&}UPF50+{\c&HFFFFFF&}・UVカット
+; This legacy file is documentation only, NOT a renderable market-specific template.
+; Generate the ASS from the v2 annotation plan using scripts/render_annotations.py.
+; Required: --market-profile, --claim-ledger, --duration. See executable_contracts.md.
+; The generated ASS binds the selected market font and implements card/text/animation layers.

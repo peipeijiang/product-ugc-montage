@@ -2,9 +2,26 @@
 
 这份参考把“视频生成器自带声音”和“广告成片的可控音频”分开。结论不是选一个万能模型，而是采用**画面先行、音频分轨、最后统一混音**的两阶段架构。
 
+## 当前环境能力快照（以本机检查为准）
+
+这不是模型推荐清单，而是本仓库当前真正可执行的边界：
+
+- 已配置的音频 provider 只有 `gem`（GEM-3.1-TTS）、`doubao`（豆包 TTS 2.0）和 `suno`（Suno v4.5），调用方式均来自 updrama；
+- 已安装的 `Kinocut` 负责本地渲染、混音和 QA，不负责生成音乐；
+- `audiocraft` 目前只是一个 skill 文档，不代表 MusicGen 权重或运行时已安装；当前 Python 环境没有 `audiocraft`、`torchaudio` 或 `transformers`；
+- Ollama 当前只有 `bge-m3`，它是文本/向量模型，不是音乐模型；
+- 工作区内 MoneyPrinterTurbo 的 MP3 是示例/素材文件，不等于已授权的广告音乐库，也不等于本地音乐生成模型；
+- 因此当前**没有已下载并可直接调用的本地 AI 音乐模型**。
+
+### 当前唯一可执行的回退判断
+
+Suno 生成失败时，当前回退只能是**用户提供或已确认授权的本地音乐文件/素材库**，再由 Kinocut 做裁切、淡入淡出、ducking 和 QA。不能把未安装的 MusicGen、Stable Audio Open 或 ACE-Step 写成自动 fallback，也不能用测试正弦波或持续嗡声伪造音乐。
+
+如果未来明确批准安装本地模型，再单独评估 ACE-Step；安装、checkpoint 下载、显存、速度和商用许可都要先验证，不能在本次运行中隐式完成。
+
 ## 结论先行
 
-对于产品 UGC 投放，默认不要把最终配乐烘进视频生成阶段。让 `video-use` 只做画面理解、卖点匹配和 EDL；随后单独生成一条完整日语旁白和一条无 vocals 的音乐轨，再由 Kinocut/FFmpeg 做 sidechain ducking、响度归一化和 QA。这样才能在不重剪画面的情况下替换音色、配乐、音量和版本风格。Omni-Flash 可以额外跑一轮“原生配乐参考”：若它输出的是贯穿全片、无对白/人声、无嗡声且通过版权和响度检查的音乐，可作为候选 BGM 与 Suno/Lyria 盲听比较；不要因为它随视频生成就自动放行。
+对于产品 UGC 投放，默认不要把最终配乐烘进视频生成阶段。让 `video-use` 只做画面理解、卖点匹配和 EDL；随后单独生成一条完整目标市场语言旁白和一条无 vocals 的音乐轨，再由 Kinocut/FFmpeg 做 sidechain ducking、响度归一化和 QA。这样才能在不重剪画面的情况下替换音色、配乐、音量和版本风格。Omni-Flash 可以额外跑一轮“原生配乐参考”：若它输出的是贯穿全片、无对白/人声、无嗡声且通过版权和响度检查的音乐，可作为候选 BGM 与 Suno/Lyria 盲听比较；不要因为它随视频生成就自动放行。
 
 视频模型的原生音频适合预览、对白或音效驱动的创意探索；正式广告仍应把它视为临时音轨：保留画面参考，最终导出前静音并重配。以 Veo 3.1 为例，官方 API 将原生音频列为 always-on，并支持对白、SFX、环境声提示，但输出不是一个可独立替换的音乐 stem。这是“生成带配乐”适合 demo、不适合作为最终投放母带的原因。[Veo 3.1 API](https://ai.google.dev/gemini-api/docs/veo)
 
@@ -15,7 +32,7 @@
         ↓
 video-use：画面理解 → 卖点/镜头排名 → 多版本 EDL
         ↓
-完整日语脚本 → GEM-3.1-TTS（单一音色、完整音轨）
+完整目标市场语言脚本 → GEM-3.1-TTS（单一音色、完整音轨）
         ↓
 粗剪时长/节拍分析 → 生成 2–4 条无 vocals BGM 候选
         ↓
@@ -26,16 +43,17 @@ Kinocut：视频 + 旁白 + 选定 BGM → sidechain ducking → loudness/黑帧
 
 关键点：BGM 候选应在粗剪画面和旁白已经确定后生成或筛选；不要先固定 30 秒，也不要为每个镜头切一段独立配乐。运行时由旁白真实时长加 headroom/tail 推导，音乐只负责适配该时长。
 
-## 模型与工具选型
+## 模型与工具选型（仅列当前可执行链路）
 
 | 目标 | 首选 | 适用理由 | 主要限制 |
 |---|---|---|---|
-| 高质量、无 vocals 的广告底乐 | **Lyria 3.5** 或 Suno v4.5 instrumental | Lyria 支持文本/图片条件、乐器/速度/结构提示及“Instrumental only, no vocals”；Suno 适合快速做多候选 | 需要正式 provider adapter、版权/商用条款必须单独记录；候选仍要听感 QA。 [Lyria](https://ai.google.dev/gemini-api/docs/music-generation) |
-| 随画面/节奏自适应 | **Lyria RealTime**；或 Timbre/sonique 一类 video-to-music 编排 | 可用 WebSocket 实时 steer；开源参考展示了按场景情绪、节奏、转场生成并用短段 crossfade | 工程复杂，实时结果需冻结为可复现的 stems/segments；不应直接把实时流当最终母带。 [Lyria RealTime](https://ai.google.dev/gemini-api/docs/realtime-music-generation) |
-| 本机/私有化短动机、转场、环境声 | **Stable Audio Open**、MusicGen、ACE-Step | 可自托管，适合 riff、鼓点、短 cue、SFX 和风格变体；可降低 API 成本 | Stable Audio Open 主要生成最长约 47 秒的 samples/SFX，不以长篇连贯歌曲为目标；MusicGen 官方建议中型/旋律模型需约 16GB VRAM。 [Stable Audio Open](https://stability.ai/news-updates/introducing-stable-audio-open) · [MusicGen](https://github.com/facebookresearch/audiocraft/blob/main/docs/MUSICGEN.md) |
+| 高质量、无 vocals 的广告底乐 | **Suno v4.5 instrumental** | 当前唯一已接入的 AI 配乐 provider；可按市场、速度、乐器和结尾写候选 prompt | 仍需逐条听感、无 vocals/无嗡声、版权和响度 QA；失败时不能自动换未配置模型 |
+| 旁白 | **GEM-3.1-TTS** 或 **豆包 TTS 2.0** | 两者均有正式 updrama adapter；按市场选择并 audition 女声与自然口语风格 | 需实时查询 voice catalog；当前仓库没有任何线上音色效果保证 |
+| 本地/授权回退 | 用户提供或已确认授权的音乐文件 | 不需下载 AI checkpoint，可直接由 Kinocut/FFmpeg 适配时长和响度 | 必须记录许可、来源和投放地域；没有授权文件时音频链路停止 |
+
 | 版权稳定的兜底 | 经过授权的 stock/library + AI 检索/beat 对齐 | 商用风险和音乐性通常比弱生成模型更可控；可按 mood、BPM、时长筛选 | 需核对地域、广告投放和平台许可；不是“零成本 AI 生成”。 |
-| 日语旁白 | **GEM-3.1-TTS**（当前默认） | 已接入 updrama，支持单一完整音轨和多语言 | 先做 2–3 个音色 audition；用自然语言指定年龄、语气、停顿、速度和日语发音，避免播音腔。 |
-| 旁白备选 | Gemini-TTS、ElevenLabs、Cartesia Sonic | 都支持风格/速度/情绪控制；适合在 GEM 音色仍有明显 AI 感时做 A/B | 需新增 adapter、价格和商用许可核验；过度情绪控制可能产生伪影。 [Gemini-TTS](https://docs.cloud.google.com/text-to-speech/docs/gemini-tts) · [ElevenLabs Voice Design](https://elevenlabs.io/docs/eleven-creative/voices/voice-design) · [Cartesia controls](https://docs.cartesia.ai/ja-jp/build-with-cartesia/capability-guides/control-speed-and-emotion) |
+
+其他模型或开源项目（例如 Lyria、MusicGen、ACE-Step）在这里仅作为未来独立评估方向，不是本机已安装能力，也不是自动 fallback。安装权重、依赖、显存和商业许可都必须另行批准。
 
 ## 为什么不把最终配乐直接放进视频生成
 
@@ -50,7 +68,7 @@ Kinocut：视频 + 旁白 + 选定 BGM → sidechain ducking → loudness/黑帧
 
 每条候选至少包含：`用途/市场 + 情绪 + 速度/BPM + 主乐器 + 结构变化 + 无人声约束 + 结尾方式`。示例：
 
-> `Japanese lifestyle UGC product bed, warm acoustic guitar, soft marimba and brushed percussion, 92 BPM, gentle lift at the product reveal, sparse under voiceover, evolving arrangement, natural resolved ending, instrumental only, no vocals, no chanting, no lyrics, no dramatic drop, no drone, no hum.`
+> 日本市场示例：`Japanese lifestyle UGC product bed, warm acoustic guitar, soft marimba and brushed percussion, 92 BPM, gentle lift at the product reveal, sparse under voiceover, evolving arrangement, natural resolved ending, instrumental only, no vocals, no chanting, no lyrics, no dramatic drop, no drone, no hum.` 其他市场必须从冻结市场配置改写文化语境，不能照搬 Japanese。
 
 同一粗剪建议生成 2–4 条风格相近但编曲不同的候选（例如 acoustic、lo-fi electronic、light city-pop instrumental），再按镜头情绪和旁白密度分配。评分维度：
 
@@ -73,7 +91,7 @@ Kinocut：视频 + 旁白 + 选定 BGM → sidechain ducking → loudness/黑帧
 
 ## 对本 skill 的落地决策
 
-当前默认保持 **GEM-3.1-TTS + Suno instrumental candidate pool**，但 Suno 不再是“唯一正确答案”。下一步应补一个 `score_audio_candidate` 阶段：先读取视频 EDL、旁白 timing 和 mood tags，再并发请求/检索有限数量的候选，自动打分后交给用户选择风格或接受默认最优项。后续可增加 Lyria 3.5 adapter；Lyria RealTime 作为实验性“自适应配乐”后端；Stable Audio Open/MusicGen/ACE-Step 作为本地短 cue/fallback，而不是强行承担整条长 BGM。
+当前默认保持 **GEM-3.1-TTS 或豆包女声 audition + Suno instrumental candidate pool**。候选评分由听感、无 vocals/无嗡声、时长适配、响度和授权证据组成；仓库当前没有独立的 `score_audio_candidate` 可执行脚本，因此不得把该阶段描述成已自动完成。Suno 失败时，当前自动链路应停在“授权本地音乐回退”，而不是调用未安装模型。其他模型仅保留为未来经过用户批准后的独立安装/接入项目，不属于当前运行时能力。
 
 相关开源参考：
 

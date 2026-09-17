@@ -9,6 +9,7 @@ Use this reference when the request begins with an ecommerce URL rather than an 
 3. Classify the request using ChronoForge: product URL = `product_video`; URL plus uploaded/local footage = `hybrid`.
 4. For TikTok Shop, regional pages, or any page that may require cookies, use `ego-browser` first. If the page shows a login, CAPTCHA, device prompt, or region challenge, stop and ask the user to take over.
 5. Treat product-ugc-pipeline as the only production generation path: use its complete extraction, built-in vision, product brief, taxonomy, identity lock, usage ledger, prompt generation, keyframes, paid video adapters, parallel-batch state tracking, and L1/L2 QC. Do not substitute an ad-hoc model/API workflow.
+6. For new `omni-flash`/`omni_flash-10s` montage assets, select `omni-reference` before image generation: generate a genuine chronological storyboard from the current risk-routed script, pass storyboard QC, and submit it with the verified product identity grid. Protected routes omit the operation grid. Follow the reference and risk-record contracts in `../SKILL.md` section 2; single-frame renaming and adapter scene-anchor fallbacks do not satisfy them.
 
 ## Evidence gate
 
@@ -28,14 +29,18 @@ Before a paid job, present:
 - confirmed selling points and rejected/uncertain claims;
 - number of visual variants and expected runtime;
 - selected video model and reference mode;
-- unified audio policy: all source clips muted, one complete Japanese GEM-3.1-TTS narration, one BGM bed;
+- unified audio policy: all source clips muted, one complete target-language GEM-3.1-TTS narration, one BGM bed;
 - whether the user authorizes paid generation now.
 
 The user may pre-authorize a model and batch size in the same request; otherwise pause at this gate. Keep the reference-pack lock and paid-create confirmation separate.
 
 ## Asset-library gate
 
-After video QC, write an append-only library manifest. Group clips by one selling point and retain 3 or more visual variants when budget allows. Keep accepted, reserve, rejected, and superseded clips distinguishable. Record hashes/provenance and never replace source evidence with generated images.
+Before generation, assign distinct creative slots so requested variants do not merely reuse the same storyboard, opening frame, composition or camera treatment. A ten-second Omni container may cover two or three compatible claims to reduce generation cost, but every claim needs a separate chronological proof beat and later a separately observed/QC'd shot range. The first beat is the chosen hook claim and must land inside three seconds. Validate the full plan with `validate_generation_matrix.py` before requesting paid storyboards/videos; its creative axes must then be passed through to the actual product-pipeline prompt batch.
+
+After video QC, write an append-only **shot-range** library manifest. Group/query shots by `claim_ids`; retain at least three materially different visual clusters per selling point when budget allows. Run `fingerprint_shots.py` and visual review; duplicate or near-duplicate clusters cannot both remain active. Keep accepted, reserve, rejected and superseded shots distinguishable. Record source/range hashes, creative slot, visual fingerprint/cluster, provenance and range-level QC; never replace source evidence with generated images.
+
+Only after this library is complete, run batch planning and present the TikTok recommendation. Default guidance is at least 3 distinct variants for a meaningful test, 6 as the recommended first batch when the library passes the overlap limit, and no more than 12 in one review/export round. Do not claim six are available when the low-repeat capacity is lower; report the shortfall and propose the exact additional visual clusters required.
 
 ## Handoff into montage
 
