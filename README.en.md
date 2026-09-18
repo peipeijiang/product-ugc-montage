@@ -115,19 +115,26 @@ Default thresholds: diversity `<65` or ending `<70` requires visual review and r
 
 ### 7. One visual understanding, many parallel montages
 
-Default target: **20 distinct-opening ads**. Budget sources and proof beats before generation, then record observed ranges and validate actual post-QC capacity:
+Default target: **20 distinct-opening ads**, not a fixed source count. First author distinct creative briefs and draft scripts, with per-video claim subsets, proof treatments and continuous shot-duration requirements.
 
 ```bash
 python3 ~/.agents/skills/product-ugc-montage/scripts/plan_variant_batch.py \
-  ./asset_library/library_manifest.json --include-reserve \
+  ./asset_library/library_manifest.json --demand ./edit/creative-demand.json --include-reserve \
   -o ./edit/variant_batch_plan.json
 ```
 
-The planner reports theoretical combinations, actual candidates, unique hooks and shortfall against target 20 (or the explicit user count). No two outputs may reuse an opening visual cluster or overlapping source range in their first 3s. Claim order may vary; changing text/crop/music alone is not a new opening. Insufficient capacity exits 2 rather than silently shrinking or padding the batch.
+The demand-led loop has six stages:
 
-Conservative example: three compatible confirmed claims and 20 requested ads imply 20 planned independent opening containers plus 25% reserve: **25 proposed 10s source requests**, each covering 2–3 separately usable proof beats. This is an assumption-based budget, not a universal minimum or a guarantee. Real narration runtime, failures and visual duplication can require extra sources.
+1. **Creative demand:** each video gets its own main/supporting claims and hook/proof/transition/ending duration needs; not every ad must cover every claim.
+2. **Source design:** generate only 10s Omni all-purpose-reference sources. One complex proof can occupy a source; interior beats may become independent hooks. Twenty openings do not require twenty files.
+3. **Pilot calibration:** record task-level usable seconds, independent hooks, failure reasons and yield intervals by comparable difficulty/layout. No automatic 25% reserve.
+4. **Constrained allocation:** a dependency-free finite-domain search reports `FEASIBLE / INFEASIBLE / UNKNOWN`. A search limit is not evidence that more paid footage is necessary.
+5. **Targeted supplementation:** report missing claim/proof/role/seconds needs, reuse accepted footage and rerun allocation after each complete independent TTS track establishes actual runtime.
+6. **Forecast audit:** freeze predictions/hashes and compare actual new generation count, deliveries and errors. Regression tests do not establish predictive accuracy.
 
-Product-page photos are reference/evidence only, never timeline footage. `generate_montage_sources.py` fixes Omni all-purpose references and 10s; source admission checks canonical receipts, hashes, decoded video duration and observed motion QC. `validate_batch.py` rejects repeated scripts, narration audio/tasks and opening footage; passing BGM may be shared selectively. Actual rendered-opening comparison and per-video release QA remain mandatory. See the [batch production contract](references/batch_production.md).
+`plan_source_budget.py` consumes creative demand, source designs, optional accepted footage and reviewed task history. Without comparable history it keeps the total prediction unknown and recommends a pilot. A feasible source set is not claimed to be globally cheapest. `validate_batch.py --demand` checks the final EDL against measured demand and rejects shared narration; passing BGM may be shared selectively.
+
+No new solver or generation model is automatically installed. See the [batch contract](references/batch_production.md) and reusable [creative demand schema](references/creative_demand.schema.json) for commands, formats and statistical assumptions.
 
 ### 8. Auditable local rendering
 
@@ -159,9 +166,9 @@ Run local checks first:
 ```bash
 python3 ~/.agents/skills/product-ugc-montage/scripts/check_env.py --edit-dir ./edit --market-profile ./analysis/market-profile.json
 python3 ~/.agents/skills/product-ugc-montage/scripts/fingerprint_shots.py ./asset_library/library-draft.json -o ./asset_library/library-indexed.json
-python3 ~/.agents/skills/product-ugc-montage/scripts/plan_variant_batch.py ./asset_library/library-indexed.json --include-reserve -o ./edit/variant_batch_plan.json
-# Run plan_source_budget.py BEFORE generation; post-QC planning targets 20 by default.
-# A capacity shortfall is reported with exit 2, never silently padded or reduced.
+python3 ~/.agents/skills/product-ugc-montage/scripts/plan_variant_batch.py ./asset_library/library-indexed.json --demand ./edit/creative-demand.json --include-reserve -o ./edit/variant_batch_plan.json
+# Before generation: plan_source_budget.py edit/creative-demand.json --matrix edit/source-candidates.json -o edit/budget.json
+# After generation verify observed capacity; UNKNOWN means unresolved search, not proven shortage.
 # See references/executable_contracts.md for complete EDL, overlay, ending and audio QA commands.
 ```
 

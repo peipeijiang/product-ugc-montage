@@ -8,9 +8,10 @@ import re
 from pathlib import Path
 from contracts import accepted_shots, digest, overlap
 from validate_edl import validate as validate_edl
+from demand_planner import validate_demand, matches, conflicts
 
 
-def validate(data, root, library, library_root):
+def validate(data, root, library, library_root, demand=None):
     def path(value):
         p = Path(value)
         return p if p.is_absolute() else Path(root) / p
@@ -25,6 +26,17 @@ def validate(data, root, library, library_root):
     lookup = {s['shot_id']: s for s in shots}
     seen = {k: set() for k in ('variant_id', 'narration_id', 'script', 'audio', 'task', 'opening')}
     openings = []
+    assignments=[]
+    briefs={}
+    runtimes={}
+    if demand is not None:
+        validate_demand(demand)
+        if any(demand.get(k)!=library.get(k) for k in ('market_profile_id','market_profile_sha256')):
+            errors.append('demand/library market mismatch')
+        if target!=demand.get('target_videos',20):
+            errors.append('batch/demand target mismatch')
+        briefs={v['variant_id']:v for v in demand['variants']}
+        runtimes={k:v['runtime_seconds'] for k,v in briefs.items()}
     for item in variants:
         edl, narration, journal = read(item['edl']), read(item['narration']), read(item['journal'])
         errors.extend(validate_edl(edl, narration, shots, library['market_profile_id']))
@@ -48,6 +60,24 @@ def validate(data, root, library, library_root):
         if not prompt or hashlib.sha256(prompt.encode()).hexdigest() != narration.get('tts_prompt_sha256'):
             errors.append('narration must bind its actual full TTS request prompt')
         segments = edl.get('segments', [])
+        if demand is not None:
+            brief=briefs.get(item.get('variant_id'))
+            if (not brief or brief['runtime_basis']!='measured'
+                    or len(segments)!=len(brief['slots']) or edl.get('runtime')!=brief['runtime_seconds']):
+                errors.append('release requires this variant measured demand/runtime and all slots')
+            else:
+                if ''.join(brief['script_draft'].split())!=''.join(script.read_text().split()):
+                    errors.append('measured creative demand script differs from final narration script')
+                for requirement,segment in zip(brief['slots'],segments):
+                    proof=lookup.get(segment.get('shot_id'))
+                    if not proof:
+                        continue  # validate_edl already reports unknown IDs
+                    proof={**proof,'in':segment.get('in',0),'out':segment.get('out',0)}
+                    slot={**requirement,'variant_id':item['variant_id']}
+                    if (abs(proof['out']-proof['in']-slot['seconds'])>.04 or not matches(slot,proof)
+                            or conflicts(slot,proof,assignments,demand['constraints'],runtimes)):
+                        errors.append('final EDL violates demand proof/duration/role/reuse/overlap constraints')
+                    assignments.append((slot,proof))
         first = segments[0] if segments else {}
         shot = lookup.get(first.get('shot_id'), {})
         if (not shot or shot.get('hook_eligible') is not True
@@ -71,11 +101,12 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('batch', type=Path)
     ap.add_argument('--library', type=Path, required=True)
+    ap.add_argument('--demand', type=Path, required=True)
     ap.add_argument('-o', '--output', type=Path)
     args = ap.parse_args()
     try:
         errors = validate(json.loads(args.batch.read_text()), args.batch.parent,
-                          json.loads(args.library.read_text()), args.library.parent)
+                          json.loads(args.library.read_text()), args.library.parent,json.loads(args.demand.read_text()))
         result = {'status': 'fail' if errors else 'pass', 'errors': errors,
                   'scope': 'batch identity gate; per-video release QA and rendered-opening visual review still required'}
         payload = json.dumps(result, ensure_ascii=False, indent=2)

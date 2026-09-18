@@ -1,7 +1,7 @@
 interface:
   display_name: "Product UGC Montage"
   short_description: "从商品证据反推 10 秒 Omni 素材，批量混剪不同开头的广告"
-  default_prompt: "Use $product-ugc-montage to plan 20 distinct-opening ads by default, budget evidence-backed 10s Omni all-purpose-reference sources, create a separate complete GEM/Doubao narration for each video, selectively share soft BGM, then render product annotations and run per-video and batch QA."
+  default_prompt: "Use $product-ugc-montage to design 20 distinct creative briefs, derive proof-duration demand, calibrate an authorized 10s Omni reference pilot, allocate existing footage and targeted supplements, then create independent complete narration and validate measured-runtime edits before rendering and QA."
 
 policy:
   allow_implicit_invocation: true

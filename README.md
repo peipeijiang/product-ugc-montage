@@ -115,24 +115,26 @@ GET  /v1/media/status?task_id=...
 
 ### 7. 一次理解、多条并发混剪
 
-默认目标是 **20 条不同开头的混剪视频**：先从已确认卖点反推素材预算和 10 秒分镜，再生成、质检、记录实际卖点时间段，最后验证容量：
+默认目标是 **20 条不同开头的混剪视频**，但素材数量不写死。AI 先设计 20 条独立创意及旁白草稿，明确每条的主卖点、辅助卖点、证明方式和所需镜头秒数，再计算素材需求。
 
 ```bash
 python3 ~/.agents/skills/product-ugc-montage/scripts/plan_variant_batch.py \
-  ./asset_library/library_manifest.json --include-reserve \
+  ./asset_library/library_manifest.json --demand ./edit/creative-demand.json --include-reserve \
   -o ./edit/variant_batch_plan.json
 ```
 
-规划器会给出：
+生产流程现在分成六步：
 
-- 理论组合数：各买点镜头选择的笛卡尔积；
-- 默认目标和搜索上限 20 条，用户明确数量可覆盖；
-- 实际独立开头数量、低重复候选数量、还差多少条；
-- 每条前 3 秒不得复用同一视觉簇或重叠源片范围，卖点顺序可变化。
+1. **创意需求**：每条可选择不同卖点子集，不再强制覆盖全部卖点；记录开头、证明、过渡和动态结尾的连续秒数。
+2. **素材设计**：每次仍生成 10 秒 Omni 全能参考视频；复杂证明可独占一条，中段也可设计成独立开头。不再规定“20 条成片至少 20 个素材文件”。
+3. **小批校准**：按动作难度和分镜结构试生成，记录每个任务的有效秒数、独立开头、失败原因及通过率区间，不默认增加 25%。
+4. **约束排片**：本地有限域搜索验证完整需求，区分 `FEASIBLE / INFEASIBLE / UNKNOWN`；搜索超时不等于素材不足，也不自动触发付费补生成。
+5. **定向补缺**：只提出缺少的“卖点 × 证明方式 × 用途 × 秒数”；先利用已有合格素材。每条独立 TTS 返回后，用实测时长重新排片。
+6. **预算复盘**：冻结预测与哈希，记录实际生成数、交付数和误差；测试通过不等于预测准确率已获验证。
 
-保守预算示例：3 个已确认且兼容的卖点、目标 20 条，规划 20 个不同开头的 10 秒素材容器，另加 25% 淘汰余量，共 **25 条待审批源素材**；每条安排 2–3 个可独立取用的证明镜头。这是有假设的预算，不是固定最低值，也不保证必出 20 条。实际时长、生成失败或近似重复会触发补素材建议，不会强行定格/循环。
+`plan_source_budget.py` 输入创意需求、候选素材矩阵、可选现有素材库和历史任务复核，输出可行素材集合及校准情景；没有历史时，数量预测保持未知，先给试生成建议。可行集合不宣称全局最省成本。`validate_batch.py --demand` 在发布前核对实际 EDL 与实测需求，并拒绝共用配音。BGM 可适当共用。
 
-网页商品图只能作为模型参考，不能直接变成广告镜头。`generate_montage_sources.py` 强制 Omni 全能参考 + 10 秒；入库核验模型回执、参考哈希、真实视频时长和运动复核。`validate_batch.py` 拒绝跨视频重复完整脚本、配音音频/任务及开头；合格 BGM 可适当共用。另需对所有成片的前 3 秒做实际视觉对比，不能只换文案或裁切冒充新开头。完整协议见 [批量生产契约](references/batch_production.md)。
+工具只用现有 Python 环境，不自动安装新求解器或生成模型。完整格式、命令和统计假设见 [批量生产契约](references/batch_production.md)；可复用格式见 [创意需求 JSON Schema](references/creative_demand.schema.json)。
 
 ### 8. 可审计的本地渲染
 
@@ -163,8 +165,9 @@ git clone https://github.com/peipeijiang/product-ugc-montage.git ~/.agents/skill
 ```bash
 python3 ~/.agents/skills/product-ugc-montage/scripts/check_env.py --edit-dir ./edit --market-profile ./analysis/market-profile.json
 python3 ~/.agents/skills/product-ugc-montage/scripts/fingerprint_shots.py ./asset_library/library-draft.json -o ./asset_library/library-indexed.json
-python3 ~/.agents/skills/product-ugc-montage/scripts/plan_variant_batch.py ./asset_library/library-indexed.json --include-reserve -o ./edit/variant_batch_plan.json
-# 生成前先运行 plan_source_budget.py；生成后默认验证 20 条容量，不足退出 2 并报告缺口。
+python3 ~/.agents/skills/product-ugc-montage/scripts/plan_variant_batch.py ./asset_library/library-indexed.json --demand ./edit/creative-demand.json --include-reserve -o ./edit/variant_batch_plan.json
+# 生成前：plan_source_budget.py edit/creative-demand.json --matrix edit/source-candidates.json -o edit/budget.json
+# 生成后验证实际容量；UNKNOWN 是搜索未完成，不是已证素材不足。
 # 完整 EDL、标注渲染、动态结尾和音频 QA 命令见 references/executable_contracts.md。
 ```
 

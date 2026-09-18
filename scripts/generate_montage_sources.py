@@ -9,6 +9,8 @@ from pathlib import Path
 from contracts import digest
 from source_policy import MODELS, model_id
 from validate_generation_matrix import validate
+from demand_planner import validate_demand
+from plan_source_budget import planned_supply
 
 
 def command(args):
@@ -16,6 +18,11 @@ def command(args):
     errors, _ = validate(matrix)
     if errors:
         raise ValueError('; '.join(errors))
+    demand=json.loads(args.demand.read_text())
+    validate_demand(demand)
+    planned_supply(matrix,demand)
+    if matrix.get('demand_sha256')!=digest(args.demand):
+        raise ValueError('source matrix must bind the current creative demand hash')
     if model_id(matrix['model']) != model_id(args.model):
         raise ValueError('model differs from approved source matrix')
     prompts = json.loads(args.prompts.read_text())
@@ -48,6 +55,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     ap.add_argument('product', type=Path)
     ap.add_argument('--matrix', type=Path, required=True)
+    ap.add_argument('--demand', type=Path, required=True)
     ap.add_argument('--prompts', type=Path, required=True)
     ap.add_argument('--pipeline', type=Path, default=Path(__file__).resolve().parents[2]/'product-ugc-pipeline')
     ap.add_argument('--model', choices=MODELS, default='omni-flash-10s')

@@ -31,8 +31,6 @@ def validate(data):
     containers=data.get('containers',[])
     if not containers:
         return errors+['containers required'],{}
-    if len(containers)<target:
-        errors.append('budget at least one distinct opening container per target video before generation')
     ids,slots,signatures=set(),set(),set()
     hook_counts=Counter()
     proof_counts=Counter()
@@ -45,11 +43,12 @@ def validate(data):
         if item.get('model',data.get('model'))!=data.get('model') or item.get('reference_mode','omni-reference')!='omni-reference':
             errors.append(prefix+' cannot override the approved model/reference route')
         claims=item.get('claim_ids',[])
-        if not min(2,len(points))<=len(claims)<=3 or len(claims)!=len(set(claims)) or not set(claims)<=set(points):
-            errors.append(prefix+' needs 2-3 unique known claim_ids (one if only one confirmed claim exists)')
+        if not 1<=len(claims)<=3 or len(claims)!=len(set(claims)) or not set(claims)<=set(points):
+            errors.append(prefix+' needs 1-3 unique known claim_ids; complex proofs may occupy the whole source')
         hook=item.get('hook_claim_id')
-        if hook not in claims: errors.append(prefix+' hook_claim_id must be in claim_ids')
-        else: hook_counts[hook]+=1
+        if hook is not None:
+            if hook not in claims: errors.append(prefix+' hook_claim_id must be in claim_ids')
+            else: hook_counts[hook]+=1
         slot=item.get('creative_slot_id')
         if not slot or slot in slots: errors.append(prefix+' duplicate/missing creative_slot_id')
         slots.add(slot)
@@ -73,19 +72,16 @@ def validate(data):
                 seen_claims.add(claim); proof_counts[claim]+=1
         if abs(cursor-10)>.001: errors.append(prefix+' beats must cover all 10 seconds')
         if seen_claims!=set(claims): errors.append(prefix+' every container claim needs a proof beat')
-        if not beats or beats[0].get('claim_id')!=hook or beats[0].get('start')!=0:
+        if hook is not None and (not beats or beats[0].get('claim_id')!=hook or beats[0].get('start')!=0):
             errors.append(prefix+' first beat must start with the hook claim')
-        if not beats or not number(beats[0].get('end')) or beats[0]['end']<3:
+        if hook is not None and (not beats or not number(beats[0].get('end')) or beats[0]['end']<3):
             errors.append(prefix+' reserve at least 3 continuous seconds for the opening proof')
         payoff=item.get('hook_payoff_by')
-        if not number(payoff) or payoff>3 or payoff<=0:
+        if hook is not None and (not number(payoff) or payoff>3 or payoff<=0):
             errors.append(prefix+' hook_payoff_by must be within the first 3 seconds')
-        elif not beats or not number(beats[0].get('end')) or payoff>beats[0]['end']:
+        elif hook is not None and (not beats or not number(beats[0].get('end')) or payoff>beats[0]['end']):
             errors.append(prefix+' hook payoff must occur inside the hook proof beat')
-    if points and (set(proof_counts)!=set(points) or min(proof_counts.values(),default=0)<1):
-        errors.append('every selling point needs at least one planned proof')
-    if hook_counts and max(hook_counts.values())-min(hook_counts.get(p,0) for p in points)>1:
-        errors.append('hook selling points are not balanced across the batch')
+    # Pilots/supplements can target scarce proofs; campaign coverage belongs to demand assignment.
     return errors,{'container_count':len(containers),'hook_counts':dict(hook_counts),
                    'proof_counts':dict(proof_counts),'unique_visual_treatments':len(signatures)}
 

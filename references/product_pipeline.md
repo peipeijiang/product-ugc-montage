@@ -36,11 +36,11 @@ The user may pre-authorize a model and batch size in the same request; otherwise
 
 ## Asset-library gate
 
-Before generation, assign distinct creative slots so requested variants do not merely reuse the same storyboard, opening frame, composition or camera treatment. A ten-second Omni container may cover two or three compatible claims to reduce generation cost, but every claim needs a separate chronological proof beat and later a separately observed/QC'd shot range. The first beat is the chosen hook claim and must land inside three seconds. Validate the full plan with `validate_generation_matrix.py` before requesting paid storyboards/videos; its creative axes must then be passed through to the actual product-pipeline prompt batch.
+Before generation, author the requested number of distinct creative briefs and per-variant proof/time needs. Pack compatible beats into 10s sources; a complex proof may occupy a whole source and an interior beat may be a self-contained hook. A pilot or supplement can target only a subset of needs. Validate the matrix and demand allocation before spending; generation remains Omni all-purpose references only.
 
 After video QC, write an append-only **shot-range** library manifest. Group/query shots by `claim_ids`; retain the opening and per-claim coverage required by the source budget, not a fixed three-per-claim quota. Run `fingerprint_shots.py` and visual review; duplicate/near-duplicate clusters cannot both remain active. Keep accepted, reserve, rejected and superseded shots distinguishable. Record source/range hashes, observed proof moment, creative slot, fingerprint/cluster, canonical provenance and range-level motion QC; never replace source evidence with generated images.
 
-Before generation, reverse-plan from the default target of 20 videos with `plan_source_budget.py`; select supported claims, distribute distinct openings/proof beats and reserve rejection capacity. After source QC, run `plan_variant_batch.py` to test actual capacity against that target. A shortfall blocks the full batch rather than padding or silently lowering the count. Read `batch_production.md` for the complete contract.
+Before generation, run `plan_source_budget.py` on creative demand, candidate sources and any accepted library. No fixed source count or flat reserve applies. Calibrate task outcomes by comparable model/market/prompt/risk groups. After QC and again after measured per-video TTS, run demand allocation. Distinguish FEASIBLE, proven INFEASIBLE and bounded-search UNKNOWN; only diagnosed gaps justify a proposed supplement, never a greedy search shortfall alone.
 
 ## Handoff into montage
 

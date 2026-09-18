@@ -11,7 +11,8 @@ import json
 import math
 import random
 from pathlib import Path
-from contracts import accepted_shots, overlap
+from contracts import accepted_shots, overlap, digest
+from demand_planner import solve
 
 def claim_orders(points, limit=720):
     count=math.factorial(len(points))
@@ -186,6 +187,10 @@ def plan(data,root,include_reserve=False,cap=20,recommended=20,selected=None,
 def main():
     ap=argparse.ArgumentParser(description=__doc__)
     ap.add_argument('manifest',type=Path)
+    ap.add_argument('--demand',type=Path,help='required for production capacity verification')
+    ap.add_argument('--explore',action='store_true',help='legacy greedy exploration, not a capacity ceiling')
+    ap.add_argument('--max-nodes',type=int,default=20000)
+    ap.add_argument('--search-seconds',type=float,default=5)
     ap.add_argument('--include-reserve',action='store_true')
     ap.add_argument('--review-cap',type=int,default=20)
     ap.add_argument('--recommended',type=int,default=20,help='target when --selected-n is omitted')
@@ -196,9 +201,25 @@ def main():
     try:
         if args.review_cap<1 or args.recommended<1:
             raise ValueError('caps must be positive')
-        result=plan(json.loads(args.manifest.read_text()),args.manifest.parent,
-                    args.include_reserve,args.review_cap,args.recommended,args.selected_n,
-                    args.max_pairwise_overlap)
+        library=json.loads(args.manifest.read_text())
+        if args.demand:
+            demand=json.loads(args.demand.read_text())
+            if any(library.get(k)!=demand.get(k) for k in ('market_profile_id','market_profile_sha256')):
+                raise ValueError('demand/library market mismatch')
+            if args.selected_n is not None and args.selected_n!=demand.get('target_videos',20):
+                raise ValueError('change the demand brief to change target N')
+            result=solve(demand,accepted_shots(library,args.manifest.parent,args.include_reserve),
+                         args.max_nodes,args.search_seconds)
+            result.update(demand_sha256=digest(args.demand),library_sha256=digest(args.manifest),
+                          status='ready' if result['solver_status']=='FEASIBLE' else 'blocked',
+                          runtime_basis={v['variant_id']:v['runtime_basis'] for v in demand['variants']})
+        elif args.explore:
+            result=plan(library,args.manifest.parent,args.include_reserve,args.review_cap,
+                        args.recommended,args.selected_n,args.max_pairwise_overlap)
+            result.update(status='exploratory_only',capacity_ceiling_proven=False,
+                          warning='legacy found count is not maximum capacity; never authorize extra generation from this alone')
+        else:
+            raise ValueError('--demand is required; --explore is non-production legacy analysis only')
         payload=json.dumps(result,ensure_ascii=False,indent=2)
         if args.output:
             args.output.write_text(payload+'\n')

@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Product UGC creative demand v1",
+  "type": "object",
+  "required": ["schema_version", "market_profile_id", "market_profile_sha256", "selling_points", "constraints", "variants"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "target_videos": {"type": "integer", "minimum": 1, "default": 20},
+    "market_profile_id": {"type": "string", "minLength": 1},
+    "market_profile_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "selling_points": {
+      "type": "array", "minItems": 1,
+      "items": {"type": "object", "required": ["id", "status", "evidence"], "properties": {
+        "id": {"type": "string", "minLength": 1}, "status": {"const": "confirmed"},
+        "evidence": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+      }}
+    },
+    "constraints": {"type": "object", "required": ["max_shot_uses", "max_pairwise_overlap"], "properties": {
+      "max_shot_uses": {"type": "integer", "minimum": 1},
+      "max_pairwise_overlap": {"type": "number", "minimum": 0, "maximum": 1}
+    }},
+    "variants": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/variant"}}
+  },
+  "$defs": {
+    "slot": {
+      "type": "object", "required": ["slot_id", "claim_id", "proof_key", "role", "seconds", "calibration_group"],
+      "properties": {
+        "slot_id": {"type": "string", "minLength": 1},
+        "claim_id": {"type": "string", "minLength": 1},
+        "proof_key": {"type": "string", "minLength": 1},
+        "role": {"enum": ["hook", "proof", "transition", "ending"]},
+        "seconds": {"type": "number", "exclusiveMinimum": 0, "maximum": 10},
+        "calibration_group": {"type": "string", "minLength": 1}
+      }
+    },
+    "variant": {
+      "type": "object",
+      "required": ["variant_id", "audience", "scenario", "creative_angle", "main_claim_id", "script_draft", "runtime_basis", "runtime_seconds", "slots"],
+      "properties": {
+        "variant_id": {"type": "string", "minLength": 1},
+        "audience": {"type": "string", "minLength": 1},
+        "scenario": {"type": "string", "minLength": 1},
+        "creative_angle": {"type": "string", "minLength": 1},
+        "main_claim_id": {"type": "string", "minLength": 1},
+        "script_draft": {"type": "string", "minLength": 1},
+        "runtime_basis": {"enum": ["estimated", "measured"]},
+        "runtime_seconds": {"type": "number", "exclusiveMinimum": 0},
+        "slots": {"type": "array", "minItems": 2, "items": {"$ref": "#/$defs/slot"}}
+      }
+    }
+  },
+  "$comment": "demand_planner.validate_demand also checks count, IDs, claim references, runtime sums and hook/ending order. Schema validity alone is not creative or release QA."
+}

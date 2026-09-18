@@ -47,8 +47,25 @@ class BatchContracts(unittest.TestCase):
                        for a,b,p in zip((0,3,6), (3,6,10), claims)]}
             for axis in ('scene_geometry','camera_distance','camera_motion','creator_staging','proof_composition'):
                 row[axis] = f'{axis}-{i}'
+            row['calibration_group']='demo'
+            for j,beat in enumerate(row['beats']):
+                beat.update(creative_slot_id=f'c{i}-b{j}',proof_key=beat['claim_id'],
+                            roles=[('hook','proof','ending')[j]],payoff_after=2,
+                            dynamic_action='observed movement')
             data['containers'].append(row)
         return data
+
+    def demand(self, count=3):
+        return {'schema_version':1,'target_videos':count,'market_profile_id':'m',
+                'market_profile_sha256':'a'*64,'selling_points':self.claims(),
+                'constraints':{'max_shot_uses':1,'max_pairwise_overlap':0},'variants':[
+                    {'variant_id':f'v{i}','audience':'test','scenario':f'scene{i}','creative_angle':f'idea{i}',
+                     'main_claim_id':f'p{i%3}','script_draft':f'test script{i}',
+                     'runtime_basis':'estimated','runtime_seconds':7,'slots':[
+                         {'slot_id':'hook','claim_id':f'p{i%3}','proof_key':f'p{i%3}','role':'hook',
+                          'seconds':3,'calibration_group':'demo'},
+                         {'slot_id':'end','claim_id':f'p{(i+2)%3}','proof_key':f'p{(i+2)%3}','role':'ending',
+                          'seconds':4,'calibration_group':'demo'}]} for i in range(count)]}
 
     def library(self, count=24, points=3):
         data = {'schema_version': 2, 'market_profile_id': 'm', 'market_profile_sha256': 'a'*64,
@@ -72,22 +89,20 @@ class BatchContracts(unittest.TestCase):
         return data
 
     def test_budget_20_and_no_invented_claims(self):
-        ledger = {'claims': self.claims()+[{'id':'fake','status':'inferred','evidence':['guess']}]}
-        result = budget(ledger)
-        self.assertEqual((result['target_videos'], result['planned_container_count']), (20,25))
-        self.assertNotIn('fake', result['confirmed_claim_ids'])
-        self.assertTrue(all(row['duration']==10 for row in result['slots']))
-        self.assertEqual(budget({'claims':self.claims(1)}, target=2)['claims_per_container'], 1)
+        result = budget(self.demand(),self.matrix())
+        self.assertEqual(result['planned_feasible_source_count'],3)
+        self.assertIsNone(result['predicted_source_count'])
+        self.assertEqual(result['status'],'pilot_required')
+        bad=self.demand()
+        bad['selling_points'][0]['status']='inferred'
+        with self.assertRaises(ValueError): budget(bad)
         with self.assertRaises(ValueError): budget({'claims':[]})
-        broad = budget({'claims':self.claims(10)})
-        self.assertGreater(broad['planned_container_count'], result['planned_container_count'])
-        self.assertGreaterEqual(min(broad['planned_proof_count_by_claim'].values()), 7)
 
     def test_matrix_rejects_route_duration_and_shortfall(self):
         matrix = self.matrix()
         self.assertEqual(matrix_check(matrix)[0], [])
         for field, value in [('model','veo3.1'), ('model','omni_flash-10s-fl'),
-                             ('reference_mode','first-last'), ('target_videos',20)]:
+                             ('reference_mode','first-last')]:
             bad = {**matrix, field:value}
             self.assertTrue(matrix_check(bad)[0])
         matrix['containers'][0]['duration'] = 8
@@ -95,6 +110,8 @@ class BatchContracts(unittest.TestCase):
 
     def test_wrapper_forces_route_and_binds_plan(self):
         matrix = self.matrix()
+        demand_path=self.save('demand.json',self.demand())
+        matrix['demand_sha256']=digest(demand_path)
         matrix_path = self.save('matrix.json', matrix)
         prompts = {'montage_matrix_sha256': digest(matrix_path), 'variants': [
             {'variant_id': c['variant_id'], 'montage_plan': c, 'storyboard_10s': c['beats']}
@@ -104,7 +121,7 @@ class BatchContracts(unittest.TestCase):
         (pipeline/'scripts').mkdir(parents=True)
         (pipeline/'scripts/generate_videos_lk888.py').write_text('# test stub; not executed')
         self.save('product_manifest.json', {})
-        args = argparse.Namespace(matrix=matrix_path, prompts=prompts_path, pipeline=pipeline,
+        args = argparse.Namespace(matrix=matrix_path, demand=demand_path,prompts=prompts_path, pipeline=pipeline,
                                   product=self.root, model='omni-flash-10s', workers=2)
         cmd = command(args)
         for flag, expected in [('--model','omni_flash-10s'), ('--duration','10'),
@@ -204,6 +221,35 @@ class BatchContracts(unittest.TestCase):
             errors = batch_check(batch,self.root,lib,self.root)
         for kind in ('audio','script','task'):
             self.assertIn('missing/reused batch '+kind, errors)
+
+    def test_final_batch_requires_measured_demand_and_checks_actual_proofs(self):
+        from test_demand_planning import fixture
+        demand,_=fixture(2)
+        demand['selling_points']=self.claims(1)
+        batch,lib=self.batch_fixture()
+        for i,row in enumerate(batch['variants']):
+            hook=lib['shots'][i]
+            hook.update(proof_keys=['demo'],roles=['hook'],calibration_group='simple')
+            ending=copy.deepcopy(hook)
+            ending.update(shot_id=f'end{i}',creative_slot_id=f'end-slot{i}',visual_cluster_id=f'end-vc{i}',
+                          roles=['ending'],dynamic_ending=True,**{'in':3,'out':5})
+            ending['qc'].update(**{'in':3,'out':5})
+            ending['dedup'].update(visual_cluster_id=f'end-vc{i}',**{'in':3,'out':5})
+            lib['shots'].append(ending)
+            edl=json.loads((self.root/row['edl']).read_text())
+            edl['runtime']=5
+            edl['segments'].append({'shot_id':f'end{i}','in':3,'out':5,'timeline_start':3,'timeline_end':5})
+            self.save(row['edl'],edl)
+            brief=demand['variants'][i]
+            brief.update(main_claim_id='p0',runtime_basis='measured',script_draft=(self.root/row['script']).read_text())
+            for s in brief['slots']: s['claim_id']='p0'
+        with patch('contracts.validate_source'):
+            self.assertEqual(batch_check(batch,self.root,lib,self.root,demand),[])
+            demand['variants'][0]['runtime_basis']='estimated'
+            self.assertTrue(batch_check(batch,self.root,lib,self.root,demand))
+            demand['variants'][0]['runtime_basis']='measured'
+            lib['shots'][2]['dynamic_ending']=False
+            self.assertTrue(batch_check(batch,self.root,lib,self.root,demand))
 
 
 if __name__ == '__main__':
